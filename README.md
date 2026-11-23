@@ -66,8 +66,7 @@ ideas:
   out. A show you haven't touched for a month after new episodes came out counts as *dropped*
   and leaves Continue Watching. Your full list of watched shows can be filtered by Watching,
   Caught up, Completed and Dropped.
-- **Stats.** Total watch time, hours watched per month, your top genres and actors, and how far
-  along you are in every show.
+- **Stats.** Total watch time, hours watched per month, and your top genres and actors.
 - **Browse and discover.** Trending, popular (in your country), coming soon, and recommendations
   based on what you've watched, plus a full catalogue you can filter by genre and sort by
   popularity, rating or date. Search finds movies, shows and people; every actor has a page with
@@ -218,8 +217,10 @@ filters at the top.
 
 The **Profile** tab shows your stats and previews of your watched and favourite movies and shows
 (tap **See all** on any of them for the full list, which you can sort by when you added it,
-A–Z or rating). Tap **See all** next to *Stats* for the full stats page: hours watched each
-month, your top genres and actors, and your progress in every show. The line under your name
+A–Z or rating). Your watched shows' full list shows how far along you are in each one, with
+its status (Watching, Caught up, Completed, Dropped), and can be filtered by status. Tap **See
+all** next to *Stats* for the full stats page: hours watched each month, and your top genres and
+actors. The line under your name
 shows when your data was last backed up.
 
 The **⋯** button on your profile opens [Settings](#settings).

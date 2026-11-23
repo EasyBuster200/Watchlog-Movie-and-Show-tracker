@@ -122,6 +122,8 @@ function renderGrid(state, context) {
   const emptyEl = document.getElementById('media-list-empty');
   const items = sortedItems(state);
   grid.innerHTML = '';
+  // Watched shows are progress rows (status, progress bar), not posters.
+  grid.className = isShowList(state) ? 'media-rows' : 'poster-grid';
   if (!isFeed(state)) setCount(items.length);
 
   // An empty list still shows its "Add a title" tile, so it needs no message.
@@ -132,9 +134,13 @@ function renderGrid(state, context) {
     else emptyEl.textContent = `No ${state.source === 'favorites' ? 'favourite' : 'watched'} ${TYPE_LABELS[state.type].toLowerCase()} yet.`;
   }
 
+  if (isShowList(state)) {
+    items.forEach(item => grid.appendChild(buildShowProgressRow(item)));
+    return;
+  }
+
   items.forEach(item => {
     const card = buildCard(item);
-    if (isShowList(state) && item.total != null) addCardDetail(card, `${item.watched}/${item.total} episodes watched`);
     if (state.source === 'list') {
       attachRemoveButton(card, item, state.listId, () => {
         state.items = state.items.filter(i => i !== item);
@@ -272,7 +278,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   const heading = document.getElementById('media-list-heading');
   const nav = document.getElementById('bottom-nav');
   const grid = document.getElementById('media-list-grid');
-  renderSkeletonRow(grid, 9);
+  if (isShowList(state)) {
+    grid.className = 'media-rows';
+    for (let i = 0; i < 6; i++) grid.appendChild(buildSkeletonMediaRow());
+  } else {
+    renderSkeletonRow(grid, 9);
+  }
 
   let title;
   if (state.source === 'list') {

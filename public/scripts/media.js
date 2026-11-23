@@ -400,6 +400,33 @@ function renderSkeletonRow(container, count = SKELETON_ROW_COUNT) {
   for (let i = 0; i < count; i++) container.appendChild(buildSkeletonCard());
 }
 
+// A watched show as a row: poster, title with its status pill (Watching / Caught up / ...),
+// and a progress bar through its aired episodes. The watched shows page lists these.
+const SHOW_STATUS_LABELS = {
+  watching: 'Watching',
+  caught_up: 'Caught up',
+  completed: 'Completed',
+  dropped: 'Dropped',
+  unknown: 'Unknown',
+};
+function buildShowProgressRow(show) {
+  const aired = show.airedCount || 0;
+  const watchedAired = aired - (show.unwatchedCount || 0);
+  const row = buildMediaRow({
+    href: detailUrl(show),
+    title: show.title,
+    imageSrc: thumbUrl(show.posterPath),
+  });
+  const titleEl = row.bodyEl.querySelector('.tt-media__title');
+  const head = el('span', 'tt-media__head');
+  titleEl.replaceWith(head);
+  head.appendChild(titleEl);
+  if (show.status) head.appendChild(el('span', `status-pill status-${show.status}`, SHOW_STATUS_LABELS[show.status] || show.status));
+  row.bodyEl.appendChild(buildProgressBar(watchedAired, aired, `${show.title} progress`));
+  row.bodyEl.appendChild(el('span', 'tt-media__meta', `${watchedAired}/${aired} aired episodes`));
+  return row;
+}
+
 function buildSkeletonMediaRow() {
   const row = el('div', 'tt-media skeleton');
   row.setAttribute('aria-hidden', 'true');

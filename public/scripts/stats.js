@@ -1,16 +1,8 @@
-// Stats (opened from Stats on Profile): the summary tiles, watch time per month, top genres, top
-// actors, and per-show progress. Each section loads on its own (GET /api/stats,
-// /api/stats/details, /api/stats/actors, /api/watched/shows?includeStatus=true), so a slow one
-// - top actors needs a credits lookup per title the first time - doesn't hold up the rest.
+// Stats (opened from Stats on Profile): the summary tiles, watch time per month, top genres and
+// top actors. Each section loads on its own (GET /api/stats, /api/stats/details,
+// /api/stats/actors), so a slow one - top actors needs a credits lookup per title the first
+// time - doesn't hold up the rest. Per-show progress lives on the watched shows page.
 
-const STATUS_LABELS = {
-  watching: 'Watching',
-  caught_up: 'Caught up',
-  completed: 'Completed',
-  dropped: 'Dropped',
-  unknown: 'Unknown',
-};
-const STATUS_ORDER = ['watching', 'caught_up', 'dropped', 'completed', 'unknown'];
 const TOP_GENRE_COUNT = 6;
 
 function showSectionMessage(container, message) {
@@ -100,46 +92,6 @@ async function loadActors() {
   }
 }
 
-function buildProgressRow(show) {
-  const aired = show.airedCount || 0;
-  const watchedAired = aired - (show.unwatchedCount || 0);
-  const row = buildMediaRow({
-    href: detailUrl(show),
-    title: show.title,
-    imageSrc: thumbUrl(show.posterPath),
-  });
-  // Title with the status pill beside it, then the progress through aired episodes.
-  const titleEl = row.bodyEl.querySelector('.tt-media__title');
-  const head = el('span', 'tt-media__head');
-  titleEl.replaceWith(head);
-  head.appendChild(titleEl);
-  head.appendChild(el('span', `status-pill status-${show.status}`, STATUS_LABELS[show.status] || show.status));
-  row.bodyEl.appendChild(buildProgressBar(watchedAired, aired, `${show.title} progress`));
-  row.bodyEl.appendChild(el('span', 'tt-media__meta', `${watchedAired}/${aired} aired episodes`));
-  return row;
-}
-
-async function loadProgress() {
-  const container = document.getElementById('progress-list');
-  container.appendChild(buildSkeletonMediaRow());
-  try {
-    const shows = await fetchJson('/api/watched/shows?includeStatus=true');
-    container.innerHTML = '';
-    if (!shows.length) {
-      showSectionMessage(container, 'Start a show to see your progress here.');
-      return;
-    }
-    shows
-      .slice()
-      .sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)
-        || (b.lastWatchedAt || '').localeCompare(a.lastWatchedAt || ''))
-      .forEach(show => container.appendChild(buildProgressRow(show)));
-  } catch (error) {
-    console.error('Failed to load show progress:', error);
-    showSectionMessage(container, "Couldn't load your show progress.");
-  }
-}
-
 async function loadSummary() {
   try {
     const stats = await fetchJson('/api/stats');
@@ -155,5 +107,4 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadSummary();
   loadDetails();
   loadActors();
-  loadProgress();
 });
