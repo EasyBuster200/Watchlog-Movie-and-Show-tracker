@@ -17,11 +17,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     page => fetchJson(`/api/tmdb/discover/movie?sort_by=popularity.desc&with_origin_country=${region}&language=en-US&page=${page}`),
     raw => movieCard(raw, context)
   );
-  // TMDB's /movie/upcoming includes titles that have already come out by now - skip those.
+  // Only movies not out yet in the profile's region (see fetchComingSoonPage).
   loadPosterRow(
     document.getElementById('upcoming-movies'),
-    page => fetchJson(`/api/tmdb/movie/upcoming?language=en-US&page=${page}`),
-    raw => (isUnreleased(raw.release_date) ? movieCard(raw, context) : null)
+    fetchComingSoonPage,
+    raw => movieCard(raw, context)
   );
   loadPosterRow(
     document.getElementById('recommended-movies'),

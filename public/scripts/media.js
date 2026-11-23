@@ -34,6 +34,37 @@ function getUserRegion() {
   return profileRegion();
 }
 
+// Coming Soon (the Movies row and its see-all page): TMDB's upcoming movies for the profile's
+// region that aren't out there yet. /movie/upcoming itself is mostly movies already released
+// (its window starts weeks back), and dropping those page by page left pages of 1-3 movies. So
+// this takes the window's end from /movie/upcoming and asks /discover/movie for the same
+// theatrical releases (types 2|3) from tomorrow to then, in the region: every page is full.
+let comingSoonEndPromise = null;
+function fetchComingSoonPage(page) {
+  const region = getUserRegion();
+  if (!comingSoonEndPromise) {
+    comingSoonEndPromise = fetchJson(`/api/tmdb/movie/upcoming?language=en-US&region=${region}&page=1`)
+      .then(d => (d.dates && d.dates.maximum) || null)
+      .catch(() => null);
+  }
+  return comingSoonEndPromise.then(end => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const latest = new Date();
+    latest.setDate(latest.getDate() + 35);
+    const params = new URLSearchParams({
+      language: 'en-US',
+      region,
+      with_release_type: '2|3',
+      'release_date.gte': localDateString(tomorrow),
+      'release_date.lte': end || localDateString(latest),
+      sort_by: 'popularity.desc',
+      page: String(page),
+    });
+    return fetchJson(`/api/tmdb/discover/movie?${params}`);
+  });
+}
+
 function detailUrl(item) {
   return `detail.html?type=${item.mediaType}&id=${item.tmdbId}`;
 }

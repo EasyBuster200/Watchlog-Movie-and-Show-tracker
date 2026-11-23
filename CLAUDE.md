@@ -129,7 +129,7 @@ Adding a new page that lists movies/shows should reuse `buildCard`/`attachStanda
 **Unreleased-content gating** goes through the same file's `isUnreleased(dateStr, now?)`: a missing or future date means it can't be marked watched yet. Its users:
 - `media.js`'s `attachWatchedButton` disables the watched toggle.
 - `episodes.js`'s `buildEpisodeCard` disables it and shows "Coming soon".
-- `movies.js`'s Coming Soon row (and the `upcoming` see-all feed) skips anything it says is already out, because TMDB's `/movie/upcoming` includes titles that have already released by fetch time.
+- Coming Soon (`movies.js`'s row and the `upcoming` see-all feed) doesn't filter page by page any more: TMDB's `/movie/upcoming` is mostly already-released movies, which left see-all pages with 1-3 movies. `media.js`'s `fetchComingSoonPage` keeps TMDB's upcoming set (its `dates.maximum` window end) but asks `/discover/movie` for theatrical releases (`with_release_type=2|3`) in the profile's region from tomorrow to then, so every page is full and "not out yet" means in your region (decided with the user).
 - `media.js`'s `ratingLabel` shows "Coming soon" instead of a rating.
 - `localApi.js`'s new-episode check uses it to ignore unaired episodes.
 

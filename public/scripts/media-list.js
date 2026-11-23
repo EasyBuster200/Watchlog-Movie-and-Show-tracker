@@ -43,7 +43,6 @@ function feedUrl(state, page) {
   const region = getUserRegion();
   if (source === 'trending') return `/api/tmdb/trending/${type}/day?language=en-US&page=${page}`;
   if (source === 'popular') return `/api/tmdb/discover/${type}?sort_by=popularity.desc&with_origin_country=${region}&language=en-US&page=${page}`;
-  if (source === 'upcoming') return `/api/tmdb/movie/upcoming?language=en-US&page=${page}`;
   if (source === 'similar') return `/api/tmdb/${type}/${id}/recommendations?language=en-US&page=${page}`;
   return null;
 }
@@ -228,9 +227,9 @@ async function loadFeedPage(state, context) {
     const d = await fetchJson(`/api/recommendations/${state.type}?page=${state.page}`);
     data = { items: d.items || [], totalPages: d.totalPages || 1 };
   } else {
-    const d = await fetchJson(feedUrl(state, state.page));
-    let raws = d.results || [];
-    if (state.source === 'upcoming') raws = raws.filter(raw => isUnreleased(raw.release_date));
+    // Coming Soon is already only movies not out yet (fetchComingSoonPage).
+    const d = await (state.source === 'upcoming' ? fetchComingSoonPage(state.page) : fetchJson(feedUrl(state, state.page)));
+    const raws = d.results || [];
     data = { items: raws.map(raw => toStandardItem(raw, state.type)), totalPages: Math.min(d.total_pages || 1, 500) };
   }
   state.items = data.items;
