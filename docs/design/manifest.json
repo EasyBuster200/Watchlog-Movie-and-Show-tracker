@@ -6,6 +6,7 @@
     "components/AiringRow/README.md",
     "components/BackButton/README.md",
     "components/BottomNav/README.md",
+    "components/BrowseHeader/README.md",
     "components/Button/README.md",
     "components/CastCard/README.md",
     "components/Chip/README.md",
@@ -91,12 +92,17 @@
     {
       "name": "Chip",
       "group": "Inputs",
-      "summary": "A pill-shaped filter toggle, used in rows to narrow a list (All / Shows / Movies on search results)."
+      "summary": "A slim, quiet pill for in-place choices: 30px tall, 12px text, a hairline border-subtle outline and no fill."
     },
     {
       "name": "Switch",
       "group": "Inputs",
       "summary": "An on/off toggle for settings that take effect immediately (notifications, auto-backup, hide watched)."
+    },
+    {
+      "name": "BrowseHeader",
+      "group": "Navigation",
+      "summary": "The title row above any browsable list, with a sort icon and a filter icon instead of rows of filter chips."
     },
     {
       "name": "ProgressBar",

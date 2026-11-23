@@ -1,4 +1,4 @@
-/* @ds-bundle: {"format":4,"namespace":"TVTracker","components":[{"name":"Icon"},{"name":"Button"},{"name":"SearchField"},{"name":"SectionHeader"},{"name":"BackButton"},{"name":"PosterArt"},{"name":"PosterCard"},{"name":"MediaRow"},{"name":"AiringRow"},{"name":"CastCard"},{"name":"Chip"},{"name":"Switch"},{"name":"ProgressBar"},{"name":"SeasonRow"},{"name":"EpisodeCard"},{"name":"StatTile"},{"name":"BottomNav"}]} */
+/* @ds-bundle: {"format":4,"namespace":"TVTracker","components":[{"name":"Icon"},{"name":"Button"},{"name":"SearchField"},{"name":"SectionHeader"},{"name":"BackButton"},{"name":"PosterArt"},{"name":"PosterCard"},{"name":"MediaRow"},{"name":"AiringRow"},{"name":"CastCard"},{"name":"Chip"},{"name":"Switch"},{"name":"BrowseHeader"},{"name":"ProgressBar"},{"name":"SeasonRow"},{"name":"EpisodeCard"},{"name":"StatTile"},{"name":"BottomNav"}]} */
 (function () {
   var React = window.React;
   var h = React.createElement;
@@ -18,6 +18,9 @@
     star: ['M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z'],
     chevron: ['M9 6l6 6-6 6'],
     play: ['M7 4.5v15l12-7.5z'],
+    sort: ['M7 4v16', 'M3.5 7.5L7 4l3.5 3.5', 'M17 20V4', 'M13.5 16.5L17 20l3.5-3.5'],
+    sliders: ['M4 7h10', 'M18 7h2', 'M16 5v4', 'M4 17h4', 'M12 17h8', 'M10 15v4'],
+    down: ['M6 9l6 6 6-6'],
     close: ['M6 6l12 12', 'M18 6L6 18'],
     plus: ['M12 5v14', 'M5 12h14'],
     more: ['M10.5 12a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0z', 'M3.5 12a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0z', 'M17.5 12a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0z'],
@@ -159,7 +162,7 @@
     return h('button', {
       type: 'button', className: cx('tt-chip', on && 'tt-chip--on'), 'aria-pressed': on, onClick: props.onClick
     },
-      props.check && on ? h(Icon, { name: 'check', size: 16, strokeWidth: 2.2 }) : null,
+      props.check && on ? h(Icon, { name: 'check', size: 12, strokeWidth: 2.6 }) : null,
       props.label,
       props.count != null ? h('span', { className: 'tt-chip__count' }, props.count) : null);
   }
@@ -172,6 +175,97 @@
       className: cx('tt-switch', on && 'tt-switch--on'),
       onClick: function () { _s[1](!on); if (props.onChange) props.onChange(!on); }
     }, h('span', { className: 'tt-switch__knob', 'aria-hidden': 'true' }));
+  }
+
+  function sectionDefault(sec) { return sec.kind === 'multi' ? [] : sec.options[0]; }
+  function sectionActive(sec, v) { return sec.kind === 'multi' ? (v || []).length > 0 : v != null && v !== sec.options[0]; }
+
+  function BrowseHeader(props) {
+    var sorts = props.sortOptions || [];
+    var sections = props.sections || [];
+    var init = {};
+    sections.forEach(function (sec) { init[sec.id] = sec.value != null ? sec.value : sectionDefault(sec); });
+    var _sort = React.useState(props.sort || sorts[0]);
+    var _vals = React.useState(init);
+    var _draft = React.useState(init);
+    var _open = React.useState(null);
+    var sort = _sort[0], vals = _vals[0], draft = _draft[0], open = _open[0];
+    var emit = function (nextSort, nextVals) { if (props.onChange) props.onChange({ sort: nextSort, values: nextVals }); };
+    var activeCount = sections.reduce(function (n, sec) {
+      var v = vals[sec.id];
+      return n + (sec.kind === 'multi' ? (v || []).length : (sectionActive(sec, v) ? 1 : 0));
+    }, 0);
+    var parts = [sort];
+    sections.forEach(function (sec) {
+      var v = vals[sec.id];
+      if (sec.kind === 'multi') { if ((v || []).length) parts.push(v.join(', ')); }
+      else if (sectionActive(sec, v)) parts.push(v);
+    });
+    var summary = props.summary || parts.join(' · ');
+    var check = function () { return h('span', { className: 'tt-menu__check' }, h(Icon, { name: 'check', size: 16, strokeWidth: 2.4 })); };
+
+    var sortMenu = open === 'sort' ? h('div', { className: 'tt-menu', role: 'menu' },
+      sorts.map(function (o) {
+        var on = o === sort;
+        return h('button', {
+          key: o, type: 'button', role: 'menuitemradio', 'aria-checked': on,
+          className: cx('tt-menu__item', on && 'tt-menu__item--on'),
+          onClick: function () { _sort[1](o); _open[1](null); emit(o, vals); }
+        }, o, check());
+      })) : null;
+
+    var setDraft = function (id, v) { var n = Object.assign({}, draft); n[id] = v; _draft[1](n); };
+    var sheetBody = open === 'sheet' ? h('div', { className: cx('tt-sheet', props.placement === 'anchored' ? 'tt-sheet--anchored' : 'tt-sheet--bottom'), role: 'dialog', 'aria-label': 'Filters' },
+      h('span', { className: 'tt-sheet__handle', 'aria-hidden': 'true' }),
+      h('div', { className: 'tt-sheet__head' },
+        h('span', { className: 'tt-sheet__title' }, 'Filters'),
+        h('button', { type: 'button', className: 'tt-link', onClick: function () { var n = {}; sections.forEach(function (sec) { n[sec.id] = sectionDefault(sec); }); _draft[1](n); } }, 'Clear all')
+      ),
+      sections.map(function (sec) {
+        var v = draft[sec.id];
+        return h('div', { key: sec.id, className: 'tt-sheet__section' },
+          h('span', { className: 'tt-filter-label' }, sec.label),
+          sec.kind === 'multi'
+            ? h('div', { className: 'tt-sheet__checks', role: 'group', 'aria-label': sec.label }, sec.options.map(function (o) {
+              var on = (v || []).indexOf(o) >= 0;
+              return h('button', {
+                key: o, type: 'button', role: 'checkbox', 'aria-checked': on,
+                className: cx('tt-menu__item', on && 'tt-menu__item--on'),
+                onClick: function () { setDraft(sec.id, on ? v.filter(function (x) { return x !== o; }) : (v || []).concat([o])); }
+              }, o, check());
+            }))
+            : h('div', { className: 'tt-seg', role: 'group', 'aria-label': sec.label }, sec.options.map(function (o) {
+              var on = v === o;
+              return h('button', { key: o, type: 'button', 'aria-pressed': on, className: cx('tt-seg__item', on && 'tt-seg__item--on'), onClick: function () { setDraft(sec.id, o); } }, o);
+            }))
+        );
+      }),
+      h(Button, { variant: 'primary', onClick: function () { _vals[1](draft); _open[1](null); emit(sort, draft); } }, 'Show results')
+    ) : null;
+    var scrim = open === 'sheet' ? h('div', { className: cx('tt-scrim', props.placement === 'anchored' && 'tt-scrim--anchored'), onClick: function () { _open[1](null); } }) : null;
+
+    var Heading = props.level === 1 ? 'h1' : 'h2';
+    return h('div', { className: 'tt-bh' },
+      h('div', { className: 'tt-bh__row' },
+        h('div', { className: 'tt-bh__text' },
+          props.title ? h(Heading, { className: 'tt-bh__title' }, props.title) : null,
+          h('span', { className: 'tt-bh__summary' }, summary)
+        ),
+        h('div', { className: 'tt-bh__actions' },
+          sorts.length ? h('button', {
+            type: 'button', className: cx('tt-iconbtn', open === 'sort' && 'tt-iconbtn--open'), 'aria-label': 'Sort: ' + sort,
+            'aria-haspopup': 'menu', 'aria-expanded': open === 'sort', onClick: function () { _open[1](open === 'sort' ? null : 'sort'); }
+          }, h(Icon, { name: 'sort', size: 18 })) : null,
+          sections.length ? h('button', {
+            type: 'button', className: 'tt-iconbtn', 'aria-label': activeCount ? 'Filters, ' + activeCount + ' active' : 'Filters',
+            'aria-haspopup': 'dialog', 'aria-expanded': open === 'sheet',
+            onClick: function () { _draft[1](vals); _open[1]('sheet'); }
+          }, h(Icon, { name: 'sliders', size: 18 }), activeCount ? h('span', { className: 'tt-iconbtn__dot', 'aria-hidden': 'true' }) : null) : null,
+          sortMenu
+        )
+      ),
+      scrim, sheetBody
+    );
   }
 
   function PosterCard(props) {
@@ -294,7 +388,7 @@
 
   window.TVTracker = {
     Icon: Icon, Button: Button, SearchField: SearchField, SectionHeader: SectionHeader,
-    BackButton: BackButton, PosterArt: PosterArt, PosterCard: PosterCard, MediaRow: MediaRow, AiringRow: AiringRow, CastCard: CastCard, Chip: Chip, Switch: Switch, ProgressBar: ProgressBar, SeasonRow: SeasonRow,
+    BackButton: BackButton, PosterArt: PosterArt, PosterCard: PosterCard, MediaRow: MediaRow, AiringRow: AiringRow, CastCard: CastCard, Chip: Chip, Switch: Switch, BrowseHeader: BrowseHeader, ProgressBar: ProgressBar, SeasonRow: SeasonRow,
     EpisodeCard: EpisodeCard, StatTile: StatTile, BottomNav: BottomNav
   };
 })();

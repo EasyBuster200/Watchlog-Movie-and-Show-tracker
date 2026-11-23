@@ -36,13 +36,17 @@ Seven accent palettes are available, each with six tokens and a value per theme:
 
 Components never use a palette directly: they read `accent`, `accent-hover`, `accent-text`, `accent-subtle`, `on-accent` and `accent-mark`, which point at the active palette (burgundy). To switch the whole app to another accent, repoint those six tokens (e.g. `accent` → `{teal}`, `accent-mark` → `{teal-mark}`). Avoid `amber` if star ratings matter on a screen: it sits close to `rating`.
 
+## Filters
+
+Filtering and sorting never take a row of their own. Every browsable list starts with `BrowseHeader`: a title and a one-line summary of what is applied, with a sort icon (opens a small menu) and a filter icon (opens a sheet with segmented choices and a genre checklist; a `accent-mark` dot marks active filters). In the app the sheet slides up from the bottom; on design frames taller than a phone use `placement="anchored"` so it drops below the header. `Chip` stays for in-place choices that are not filters (Settings theme).
+
 ## Iconography
 
-Line icons, 24px grid, 1.8px stroke, round caps and joins, no fills. Inactive icons use `text-muted`; the active one uses `accent-mark`. The set (exported as `Icon`): home, bookmark, folder, film, tv, user, eye, heart, search, back, check, star, chevron, play, more, cloud, close, plus. The current app's icon source wasn't available, so these are drawn to match its look; swap in the real files when you have them.
+Line icons, 24px grid, 1.8px stroke, round caps and joins, no fills. Inactive icons use `text-muted`; the active one uses `accent-mark`. The set (exported as `Icon`): home, bookmark, folder, film, tv, user, eye, heart, search, back, check, star, chevron, play, more, cloud, close, plus, sort, sliders, down. The current app's icon source wasn't available, so these are drawn to match its look; swap in the real files when you have them.
 
 ## Components
 
-`Icon`, `Button`, `BackButton`, `SearchField`, `SectionHeader`, `PosterArt`, `PosterCard`, `MediaRow`, `AiringRow`, `CastCard`, `Chip`, `Switch`, `ProgressBar`, `SeasonRow`, `EpisodeCard`, `StatTile`, `BottomNav`. Each reads only tokens, so restyling the tokens restyles the app. Every show or movie artwork, at any size, is `PosterArt` (inside `PosterCard`, `MediaRow` and the show header), so posters look the same everywhere. Every screen below the top level uses `BackButton` at its top-left. Pass real poster/still URLs through `image`; without one, cards show a `bg-raised` placeholder with the title's initials.
+`Icon`, `Button`, `BackButton`, `SearchField`, `SectionHeader`, `PosterArt`, `PosterCard`, `MediaRow`, `AiringRow`, `CastCard`, `Chip`, `Switch`, `BrowseHeader`, `ProgressBar`, `SeasonRow`, `EpisodeCard`, `StatTile`, `BottomNav`. Each reads only tokens, so restyling the tokens restyles the app. Every show or movie artwork, at any size, is `PosterArt` (inside `PosterCard`, `MediaRow` and the show header), so posters look the same everywhere. Every screen below the top level uses `BackButton` at its top-left. Pass real poster/still URLs through `image`; without one, cards show a `bg-raised` placeholder with the title's initials.
 
 ## What's not here yet
 

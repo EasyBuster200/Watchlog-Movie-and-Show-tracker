@@ -1,6 +1,6 @@
 import * as React from "react";
 
-export type IconName = "home" | "bookmark" | "folder" | "film" | "tv" | "user" | "eye" | "heart" | "search" | "back" | "check" | "star" | "chevron" | "play" | "more" | "cloud" | "close" | "plus";
+export type IconName = "home" | "bookmark" | "folder" | "film" | "tv" | "user" | "eye" | "heart" | "search" | "back" | "check" | "star" | "chevron" | "play" | "more" | "cloud" | "close" | "plus" | "sort" | "sliders" | "down";
 
 export interface IconProps {
   name: IconName;
@@ -122,6 +122,33 @@ export interface SwitchProps {
 }
 export declare function Switch(props: SwitchProps): React.ReactElement;
 
+export interface BrowseSection {
+  id: string;
+  label: string;
+  /** single: one choice (segmented bar; the first option means "no filter"). multi: any number (checklist). */
+  kind: "single" | "multi";
+  options: string[];
+  value?: string | string[];
+}
+export interface BrowseHeaderProps {
+  /** Section title, e.g. "Browse All Movies". */
+  title?: string;
+  /** 1 renders an h1; default h2. */
+  level?: 1 | 2;
+  /** Sort choices; the first is the default. Opens from the sort icon as a small menu. */
+  sortOptions?: string[];
+  sort?: string;
+  /** Filter groups shown in the sheet from the filter icon. */
+  sections?: BrowseSection[];
+  /** Overrides the auto summary line ("Popular · Drama, Thriller"). */
+  summary?: string;
+  /** bottom (default): sheet slides up from the bottom of the screen. anchored: sheet drops below the header (for tall design frames). */
+  placement?: "bottom" | "anchored";
+  /** Fires when the sort changes or the sheet is applied. */
+  onChange?: (state: { sort: string; values: Record<string, string | string[]> }) => void;
+}
+export declare function BrowseHeader(props: BrowseHeaderProps): React.ReactElement;
+
 export interface PosterCardProps {
   title: string;
   /** e.g. "2026 • 8.0/10" */
@@ -187,4 +214,4 @@ export interface BottomNavProps {
 }
 export declare function BottomNav(props: BottomNavProps): React.ReactElement;
 
-declare global { interface Window { TVTracker: { Icon: typeof Icon; Button: typeof Button; SearchField: typeof SearchField; SectionHeader: typeof SectionHeader; BackButton: typeof BackButton; PosterArt: typeof PosterArt; PosterCard: typeof PosterCard; MediaRow: typeof MediaRow; AiringRow: typeof AiringRow; CastCard: typeof CastCard; Chip: typeof Chip; Switch: typeof Switch; ProgressBar: typeof ProgressBar; SeasonRow: typeof SeasonRow; EpisodeCard: typeof EpisodeCard; StatTile: typeof StatTile; BottomNav: typeof BottomNav } } }
+declare global { interface Window { TVTracker: { Icon: typeof Icon; Button: typeof Button; SearchField: typeof SearchField; SectionHeader: typeof SectionHeader; BackButton: typeof BackButton; PosterArt: typeof PosterArt; PosterCard: typeof PosterCard; MediaRow: typeof MediaRow; AiringRow: typeof AiringRow; CastCard: typeof CastCard; Chip: typeof Chip; Switch: typeof Switch; BrowseHeader: typeof BrowseHeader; ProgressBar: typeof ProgressBar; SeasonRow: typeof SeasonRow; EpisodeCard: typeof EpisodeCard; StatTile: typeof StatTile; BottomNav: typeof BottomNav } } }
