@@ -364,6 +364,7 @@ a.tt-airing:hover { border-color: var(--border-strong); }
 }
 .tt-airing__dow { font-size: 10px; line-height: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
 .tt-airing__num { font-size: 18px; line-height: 20px; font-weight: 600; }
+.tt-airing__date--today .tt-airing__dow { font-size: 11px; line-height: 14px; letter-spacing: 0.04em; color: var(--text-primary); }
 .tt-airing__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .tt-airing__title { font-size: 14px; line-height: 20px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tt-airing__ep { font-size: 12px; line-height: 18px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

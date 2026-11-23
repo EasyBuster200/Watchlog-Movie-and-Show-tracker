@@ -221,10 +221,14 @@ function parseLocalDate(dateStr) {
 }
 
 // "Tonight", "Tomorrow", "In 3 days" - relative to today, for an episode's air date.
-function relativeAirLabel(dateStr) {
+function daysUntil(dateStr) {
   const today = new Date();
   const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const days = Math.round((parseLocalDate(dateStr) - start) / 86400000);
+  return Math.round((parseLocalDate(dateStr) - start) / 86400000);
+}
+
+function relativeAirLabel(dateStr) {
+  const days = daysUntil(dateStr);
   if (days <= 0) return 'Today';
   if (days === 1) return 'Tomorrow';
   return `In ${days} days`;
@@ -243,8 +247,16 @@ function buildAiringRow({ href, title, airDate, seasonNumber, episodeNumber, epi
 
   const tile = el('span', 'tt-airing__date');
   tile.setAttribute('aria-hidden', 'true');
-  tile.appendChild(el('span', 'tt-airing__dow', date.toLocaleDateString(undefined, { weekday: 'short' })));
-  tile.appendChild(el('span', 'tt-airing__num', String(date.getDate())));
+  // Just "TODAY" on the day itself; the weekday ("WED 6") within the next 7 days, where it can't
+  // be mistaken for another week; and the month ("JAN 6") further out.
+  const days = daysUntil(airDate);
+  if (days <= 0) {
+    tile.classList.add('tt-airing__date--today');
+    tile.appendChild(el('span', 'tt-airing__dow', 'Today'));
+  } else {
+    tile.appendChild(el('span', 'tt-airing__dow', date.toLocaleDateString(undefined, days < 7 ? { weekday: 'short' } : { month: 'short' })));
+    tile.appendChild(el('span', 'tt-airing__num', String(date.getDate())));
+  }
   row.appendChild(tile);
 
   const body = el('span', 'tt-airing__body');
