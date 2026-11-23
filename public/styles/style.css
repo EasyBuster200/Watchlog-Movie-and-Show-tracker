@@ -154,6 +154,9 @@ img { display: block; }
 }
 .save-popover-row:hover { background: var(--bg-raised); }
 .save-popover-row input { accent-color: var(--accent-mark); width: 18px; height: 18px; margin: 0; }
+.save-popover-row--disabled { color: var(--text-muted); cursor: default; }
+.save-popover-row--disabled:hover { background: none; }
+.save-popover-note { margin-left: auto; font-size: 11px; color: var(--text-muted); }
 
 /* Skeleton placeholders while a row or grid loads. */
 .skeleton { cursor: default; }

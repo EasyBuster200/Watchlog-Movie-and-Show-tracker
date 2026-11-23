@@ -387,6 +387,22 @@ async function findList(db, listId) {
   return dbGet(db, 'lists', Number(listId));
 }
 
+// Watched titles never stay on the Watchlist (decided with the user): a movie leaves it when
+// it's marked watched, a show when any of its episodes is, and neither can be added back.
+// Custom lists aren't affected. localDb.js's pruneWatchedFromWatchlist sweeps older data.
+async function isTitleWatched(db, tmdbId, mediaType) {
+  if (mediaType === 'movie') return !!(await dbGet(db, 'watched_movies', Number(tmdbId)));
+  return (await dbGetAllByIndex(db, 'watched_episodes', 'showId', Number(tmdbId))).length > 0;
+}
+
+async function removeFromWatchlist(db, tmdbId, mediaType) {
+  const watchlist = (await dbGetAll(db, 'lists')).find(l => l.isDefault);
+  if (!watchlist) return;
+  const items = await dbGetAllByIndex(db, 'list_items', 'listId', watchlist.id);
+  const match = items.find(i => i.tmdbId === Number(tmdbId) && i.mediaType === mediaType);
+  if (match) await dbDelete(db, 'list_items', match.id);
+}
+
 route('GET', '/api/lists', async () => {
   const db = await getDb();
   const [lists, items] = await Promise.all([dbGetAll(db, 'lists'), dbGetAll(db, 'list_items')]);
@@ -418,7 +434,7 @@ route('GET', '/api/lists/membership/:mediaType/:tmdbId', async ({ mediaType, tmd
   const items = await dbGetAll(db, 'list_items');
   const id = Number(tmdbId);
   const listIds = items.filter(i => i.tmdbId === id && i.mediaType === mediaType).map(i => i.listId);
-  return jsonResponse({ listIds });
+  return jsonResponse({ listIds, watched: await isTitleWatched(db, id, mediaType) });
 });
 
 route('DELETE', '/api/lists/:listId', async ({ listId }) => {
@@ -455,6 +471,9 @@ route('POST', '/api/lists/:listId/items', async ({ listId }, searchParams, getBo
   if (!tmdbId || !['movie', 'tv'].includes(mediaType)) {
     return jsonResponse({ error: 'tmdbId and mediaType (movie|tv) are required' }, 400);
   }
+  if (list.isDefault && await isTitleWatched(db, tmdbId, mediaType)) {
+    return jsonResponse({ error: "You've already watched this, so it can't go on the Watchlist" }, 409);
+  }
 
   try {
     await dbAdd(db, 'list_items', { listId: list.id, tmdbId, mediaType, addedAt: new Date().toISOString() });
@@ -485,6 +504,7 @@ route('POST', '/api/watched/movies/:tmdbId', async ({ tmdbId }, searchParams, ge
     watchedAt: new Date().toISOString(),
     ...pickSummaryFields(body),
   });
+  await removeFromWatchlist(db, tmdbId, 'movie');
   return jsonResponse({});
 });
 
@@ -626,6 +646,7 @@ route('POST', '/api/watched/shows/:tmdbId/season/:seasonNumber/episode/:episodeN
     episodeNumber: episode,
     watchedAt: new Date().toISOString(),
   });
+  await removeFromWatchlist(db, showId, 'tv');
   return jsonResponse({});
 });
 

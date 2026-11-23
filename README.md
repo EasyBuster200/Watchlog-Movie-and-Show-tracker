@@ -206,7 +206,10 @@ filters at the top.
 
 - **Watchlist** is your "watch later" pile: tap the bookmark on any poster and choose
   *Watchlist*. The Watchlist tab splits it into movies and shows, and has a search box to find
-  something in it. Tap the **×** on a poster to remove it.
+  something in it. Tap the **×** on a poster to remove it. Once you've watched something it
+  leaves the Watchlist by itself: a movie when you mark it watched, a show as soon as you watch
+  any episode. Titles you've watched can't be put back on the Watchlist, but they can go on your
+  own lists.
 - **Lists** lets you make your own collections (e.g. "Christmas movies"). Tap **New list**, then
   add titles from any poster's bookmark button, or open the list and tap **Add a title**. To
   delete a list, open it and use the **⋯** button at the top.

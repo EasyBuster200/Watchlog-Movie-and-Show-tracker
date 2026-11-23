@@ -574,6 +574,14 @@ function watchlistKey(item) {
   return `${item.mediaType}:${item.tmdbId}`;
 }
 
+// Marking something watched takes it off the Watchlist (localApi.js does that), so this tells
+// the page: bookmark buttons unfill and the Watchlist pages drop the card. detail.mediaType /
+// detail.tmdbId name the title.
+const TITLE_WATCHED_EVENT = 'tt:title-watched';
+function announceTitleWatched(mediaType, tmdbId) {
+  document.dispatchEvent(new CustomEvent(TITLE_WATCHED_EVENT, { detail: { mediaType, tmdbId: Number(tmdbId) } }));
+}
+
 // The bookmark: opens a popover of every list (the Watchlist first) to save the item to. It's
 // shown filled while the item is on the Watchlist. `button` defaults to a corner toggle on
 // poster art; the detail page passes its own button.
@@ -587,6 +595,11 @@ function attachSaveButton(actionsEl, item, context, { button = null } = {}) {
   btn.setAttribute('aria-label', `Save ${item.title} to a list`);
   sync();
   if (!button) actionsEl.appendChild(btn);
+  document.addEventListener(TITLE_WATCHED_EVENT, event => {
+    if (watchlistKey(event.detail) !== key || !context || !context.watchlistKeys) return;
+    context.watchlistKeys.delete(key);
+    sync();
+  });
 
   btn.addEventListener('click', async event => {
     event.stopPropagation();
@@ -616,6 +629,12 @@ function attachSaveButton(actionsEl, item, context, { button = null } = {}) {
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.checked = membership.listIds.includes(list.id);
+        // Watched titles can't go on the Watchlist.
+        const watchedLock = list.is_default && membership.watched && !checkbox.checked;
+        if (watchedLock) {
+          checkbox.disabled = true;
+          row.classList.add('save-popover-row--disabled');
+        }
         checkbox.addEventListener('change', async () => {
           if (checkbox.checked) {
             await fetch(`/api/lists/${list.id}/items`, {
@@ -635,6 +654,7 @@ function attachSaveButton(actionsEl, item, context, { button = null } = {}) {
         });
         row.appendChild(checkbox);
         row.appendChild(el('span', null, list.is_default ? 'Watchlist' : list.name));
+        if (watchedLock) row.appendChild(el('span', 'save-popover-note', 'Watched'));
         popover.appendChild(row);
       });
 
@@ -703,6 +723,7 @@ function attachWatchedButton(actionsEl, item, watchedMovieIds, onChange, { butto
         body: JSON.stringify(pickSummaryFields(item)),
       });
       watchedMovieIds.add(item.tmdbId);
+      announceTitleWatched('movie', item.tmdbId);
     }
     sync();
     if (onChange) onChange();

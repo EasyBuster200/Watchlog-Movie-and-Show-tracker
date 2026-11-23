@@ -190,13 +190,17 @@ function openAddDialog(state, context) {
       const data = await fetchJson(`/api/tmdb/search/multi?query=${encodeURIComponent(query)}`);
       const raws = (data.results || []).filter(r => !state.type || r.media_type === state.type);
       renderSearchResultRows(results, raws, async item => {
-        await fetch(`/api/lists/${state.listId}/items`, {
+        const response = await fetch(`/api/lists/${state.listId}/items`, {
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tmdbId: item.tmdbId, mediaType: item.mediaType }),
         });
         overlay.remove();
+        // The Watchlist refuses titles you've already watched (localApi.js).
+        if (response.status === 409) {
+          await confirmDialog({ title: 'Already watched', message: `You've already watched ${item.title}, so it can't go on your Watchlist.`, confirmLabel: 'OK', cancelLabel: 'Close' });
+        }
         loadLocal(state, context);
       });
     }, 300);
@@ -286,6 +290,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     nav.dataset.active = list.is_default ? 'watchlist' : 'lists';
     document.querySelector('[data-back]').dataset.back = list.is_default ? 'bookmarks.html' : 'lists.html';
     if (!list.is_default) initListMenu(state);
+    // Marking a movie watched takes it off the Watchlist (localApi.js), so drop its card.
+    if (list.is_default) {
+      document.addEventListener(TITLE_WATCHED_EVENT, ({ detail }) => {
+        if (!state.items) return;
+        state.items = state.items.filter(i => !(i.tmdbId === detail.tmdbId && i.mediaType === detail.mediaType));
+        renderGrid(state, context);
+      });
+    }
   } else if (isFeed(state)) {
     title = FEED_TITLES[state.source](state.type);
     nav.dataset.active = state.type === 'tv' ? 'shows' : 'movies';

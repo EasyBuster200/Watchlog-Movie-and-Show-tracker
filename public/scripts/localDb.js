@@ -7,7 +7,7 @@
 // database *is* one profile's data), with JS-camelCase field names matching the rest of the app's
 // existing "standard item shape" conventions.
 
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 function promisifyRequest(request) {
   return new Promise((resolve, reject) => {
@@ -56,9 +56,18 @@ function openProfileDb(profileId) {
       if (db.objectStoreNames.contains('ratings')) {
         db.deleteObjectStore('ratings');
       }
+
+      // v4: watched titles leave the Watchlist (see pruneWatchedFromWatchlist). Titles watched
+      // before this version are cleared out once the database is open.
+      if (event.oldVersion >= 1 && event.oldVersion < 4) pruneAfterOpen = true;
     };
 
-    request.onsuccess = () => resolve(request.result);
+    let pruneAfterOpen = false;
+    request.onsuccess = () => {
+      const db = request.result;
+      if (!pruneAfterOpen) return resolve(db);
+      pruneWatchedFromWatchlist(db).then(() => resolve(db), reject);
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -98,4 +107,24 @@ function dbPut(db, storeName, value) {
 function dbDelete(db, storeName, key) {
   const tx = db.transaction(storeName, 'readwrite');
   return promisifyRequest(tx.objectStore(storeName).delete(key));
+}
+
+// Nothing you've watched stays on the Watchlist (decided with the user): a movie once it's
+// marked watched, a show once any episode is. localApi.js removes each title as it's marked;
+// this sweeps the whole Watchlist, for databases from before that rule and restored backups.
+async function pruneWatchedFromWatchlist(db) {
+  if (!db.objectStoreNames.contains('list_items')) return;
+  const [lists, items, movies, episodes] = await Promise.all([
+    dbGetAll(db, 'lists'),
+    dbGetAll(db, 'list_items'),
+    dbGetAll(db, 'watched_movies'),
+    dbGetAll(db, 'watched_episodes'),
+  ]);
+  const watchlist = lists.find(l => l.isDefault);
+  if (!watchlist) return;
+  const watchedMovies = new Set(movies.map(m => m.tmdbId));
+  const watchedShows = new Set(episodes.map(e => e.showId));
+  const stale = items.filter(i => i.listId === watchlist.id
+    && (i.mediaType === 'movie' ? watchedMovies : watchedShows).has(i.tmdbId));
+  for (const item of stale) await dbDelete(db, 'list_items', item.id);
 }

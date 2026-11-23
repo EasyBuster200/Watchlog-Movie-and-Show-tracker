@@ -141,6 +141,8 @@ async function restoreBackup(payload, { displayName, tmdbApiKey }) {
       await dbPut(db, storeName, record);
     }
   }
+  // Older backups can have watched titles on the Watchlist.
+  await pruneWatchedFromWatchlist(db);
   db.close();
 
   return profile;

@@ -45,5 +45,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   watchlistItems = await fetchJson(`/api/lists/${watchlistId}/items`);
 
   document.getElementById('watchlist-search').addEventListener('input', renderWatchlist);
+  // Marking a movie watched here takes it off the Watchlist (localApi.js), so drop its card.
+  document.addEventListener(TITLE_WATCHED_EVENT, ({ detail }) => {
+    watchlistItems = watchlistItems.filter(i => !(i.tmdbId === detail.tmdbId && i.mediaType === detail.mediaType));
+    renderWatchlist();
+  });
   renderWatchlist();
 });
