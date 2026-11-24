@@ -237,6 +237,7 @@ Online accounts (roadmap Phase 3) sign in with an **account key**, not a passwor
 | `GET /v1/sessions` | yes | The account's devices, `current` marking this one |
 | `DELETE /v1/sessions/:id` | yes | Signs one of the account's devices out |
 | `DELETE /v1/session` | yes | Signs this device out |
+| `GET /v1/tmdb/<TMDB path>` | yes | TMDB, asked with the owner's token (below) |
 
 Errors a client should expect: `400` (`name_required`, `invalid_key_format`,
 `invalid_code_format`, `invalid_json`), `401` (`signed_out`, `wrong_key`, `wrong_code`), `404`,
@@ -247,13 +248,43 @@ is limited per address (10 per 15 minutes), and making keys and codes per accoun
 address. The weekly job (`cleanup.js`) deletes expired sessions and codes and old counters
 before the backup.
 
+#### The TMDB proxy
+
+Online accounts don't need a TMDB token of their own: the app sends their TMDB requests to
+`GET /v1/tmdb/<path>?<query>` (`server/src/routes/tmdb.js`), and the Worker asks TMDB with the
+owner's token. Offline profiles still call TMDB directly with their own token.
+
+- The token is the Worker secret **`TMDB_TOKEN`** (TMDB's long API Read Access Token). It's never
+  in the repository or the app. Set it in the dashboard: the Worker → **Settings → Variables and
+  secrets**, on the **Production** tab and the **Previews Base** tab (type *Secret*). Previews
+  copy Previews Base when they're created, so a preview that already exists needs it on its own
+  Settings page. Or: `npx wrangler secret put TMDB_TOKEN` and
+  `npx wrangler preview base-config secret put TMDB_TOKEN`. Without it the proxy answers
+  `503 tmdb_unavailable`.
+- Signed-in accounts only, `GET` only, and only read-only TMDB paths (`authentication`,
+  `account`, `list`, `session`, `guest_session` are refused).
+- Limits per day (`TMDB_LIMITS`): 5,000 requests per account and 40,000 overall. The overall cap
+  also keeps TMDB traffic from using up the Worker's free 100,000 requests a day. They're D1
+  counters: two small writes per request.
+- `TMDB_PROXY` (a `wrangler.jsonc` var, `"on"`) set to `"off"` pauses it (`503 tmdb_paused`).
+- Answers go into Cloudflare's edge cache for a while (a day for configuration and genres, 6 hours
+  for a title's details, 10 minutes for searches, 30 minutes otherwise) where that works; the docs
+  don't promise the Cache API on `workers.dev`.
+- Sign-up is open for now, so anyone who finds the API could make an account and use the proxy
+  within those limits. Decided with the user: switch to invite-only before online accounts are
+  shown to everyone.
+
 #### Accounts in the app
 
 `public/scripts/serverApi.js` makes the app's requests to the API above, and the profile picker
 and Settings use it: create an account, save the key, sign in with the key or a code from another
 device, add a device, see and sign out devices, sign out, delete the account. An online profile
 is an ordinary profile with an `account` on it; its library stays on the device until syncing
-exists (roadmap Phase 4).
+exists (roadmap Phase 4). Online profiles get movie and show information through the TMDB proxy
+above, so creating an account, or signing in on a new device, asks for no token. Signing out (or
+deleting the account) asks whether to keep a copy on the device, which then needs its own TMDB
+token to work offline, or remove it; a kept copy remembers its account, so signing in again
+reattaches it with its library.
 
 **It's all hidden** until then. To try it, open the browser console on the app (a pull request's
 preview, so the preview database is used) and run

@@ -92,7 +92,7 @@ Do this first: it works with today's local profiles and needs no backend.
 
 ## Phase 3: Accounts
 
-**In progress, in three parts:** **3a, the server** (accounts, account keys, sessions, pairing codes, device list, rate limits; built, see `docs/DEVELOPMENT.md`, "Accounts API"); **3b, the app** (create or sign in to an online account, save the key, add a device, the device list, upgrade a local profile; built, hidden until Phase 4 sync exists, see `docs/DEVELOPMENT.md`, "Accounts in the app"); **3c, the recovery email** (once there's a domain). Decided with the user: the recovery email is **required** (accounts made before 3c will be asked to add one), the recovery hold is **24 hours**, and sign-up is **open for now** with rate limits, until the admin page can make invites. Online accounts keep using their own TMDB token until Phase 5.
+**In progress, in three parts:** **3a, the server** (accounts, account keys, sessions, pairing codes, device list, rate limits; built, see `docs/DEVELOPMENT.md`, "Accounts API"); **3b, the app** (create or sign in to an online account, save the key, add a device, the device list, upgrade a local profile; built, hidden until Phase 4 sync exists, see `docs/DEVELOPMENT.md`, "Accounts in the app"; online accounts use the owner's TMDB token through the Phase 5 proxy, built alongside; signing out asks whether to keep a copy on the device or remove it, decided with the user); **3c, the recovery email** (once there's a domain). Decided with the user: the recovery email is **required** (accounts made before 3c will be asked to add one), the recovery hold is **24 hours**, and sign-up is **open for now** with rate limits, until the admin page can make invites. Online accounts keep using their own TMDB token until Phase 5.
 
 ### Two kinds of account
 
@@ -168,6 +168,8 @@ Sign-up is **open for now** (decided with the user): creating accounts is rate-l
 - **Recommendations, stats, show status:** unchanged; they read IndexedDB, which sync keeps filled.
 
 ## Phase 5: TMDB through the server
+
+**The proxy is built** (pulled into Phase 3 with the user, so online accounts never ask for a TMDB token): `server/src/routes/tmdb.js`, `GET /v1/tmdb/*`, the `TMDB_TOKEN` secret, daily limits per account (5,000) and overall (40,000), the `TMDB_PROXY` on/off switch, edge caching where available. Details in `docs/DEVELOPMENT.md` ("The TMDB proxy"). Still to do from the list below: per-account usage on the admin page. Sign-up stays open while online accounts are hidden; it must become invite-only before they are shown to everyone (decided with the user).
 
 For online accounts, `localApi.js`'s two TMDB chokepoints (`handleTmdbPassthrough`, `fetchLocalTmdb`) send requests to the Worker's `/tmdb/*` instead of `api.themoviedb.org`. Local accounts keep going direct with their own token.
 
