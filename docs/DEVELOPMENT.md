@@ -121,6 +121,24 @@ tracking, show statuses, the schedule, stats, recommendations, caching and retri
 auto-backups, notification scheduling and the background-check sync, and TMDB key validation.
 Page and UI code isn't covered by tests; check it in a browser.
 
+GitHub Actions (`.github/workflows/tests.yml`) runs the same `npm test` on Node 18 for every pull
+request and every push to `main`.
+
+## Working on the repository
+
+- **`main` is always releasable.** Android releases are built from it, and once the web version is
+  hosted (see [ROADMAP.md](ROADMAP.md)), every push to `main` deploys the website. Make changes on a
+  short-lived branch and merge them with a pull request, after the tests pass.
+- **Never force-push or rebase `main`.** `versionCode` is the commit count, so rewriting history
+  can lower it, and Android then refuses to install the next APK as an update. Squash-merging pull
+  requests is fine: each one adds a commit, so the count still only goes up.
+- **Large features land in small pieces**, each leaving the app working. Hide an unfinished
+  feature behind a switch rather than keeping a branch open for weeks.
+- **Secrets never go in the repository.** The release signing file lives outside it (see
+  [Signing](#signing)); the planned Cloudflare Worker's local secrets go in `.dev.vars`, which is
+  ignored.
+- What's planned next, and the decisions behind it, is in [ROADMAP.md](ROADMAP.md).
+
 ## Publishing a release
 
 The README's download link points at
