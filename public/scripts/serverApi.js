@@ -139,8 +139,13 @@ function accountKeyConfirmMatches(key, typed) {
 
 // ---------- Linking profiles and accounts ----------
 
+// The profile on this device for an account: one linked to it, or a copy kept when signing out
+// of it (formerAccountId), so signing in again reattaches that copy instead of adding another.
 function profileForAccount(accountId) {
-  return getProfiles().find(p => p.account && p.account.id === accountId) || null;
+  const profiles = getProfiles();
+  return profiles.find(p => p.account && p.account.id === accountId)
+    || profiles.find(p => !p.account && p.formerAccountId === accountId)
+    || null;
 }
 
 // Puts a sign-in response (create, key, or pairing code) on a profile.
@@ -156,12 +161,15 @@ function linkProfileToAccount(profileId, signIn, { accountKey = null, keySaved =
     keySavedAt: keySaved ? new Date().toISOString() : (sameAccount ? existing.keySavedAt || null : null),
     linkedAt: sameAccount && existing.linkedAt ? existing.linkedAt : new Date().toISOString(),
   };
-  return updateProfile(profileId, { account });
+  return updateProfile(profileId, { account, formerAccountId: null });
 }
 
-// Back to an offline profile: the library stays on the device.
+// Back to an offline profile: the library stays on the device, and it remembers the account so
+// signing in to it again reattaches this profile (profileForAccount).
 function unlinkProfileAccount(profileId) {
-  return updateProfile(profileId, { account: null });
+  const profile = getProfiles().find(p => p.id === profileId);
+  const formerAccountId = profile && profile.account ? profile.account.id : (profile && profile.formerAccountId) || null;
+  return updateProfile(profileId, { account: null, formerAccountId });
 }
 
 function markAccountKeySaved(profileId) {

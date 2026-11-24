@@ -132,6 +132,12 @@ function openProfileFromList(profile) {
     return;
   }
   if (!profile.account && !profile.tmdbApiKey) {
+    // A copy kept when signing out: signing in again reattaches it (profileForAccount).
+    if (profile.formerAccountId && ONLINE_ACCOUNTS) {
+      setActiveProfileId(profile.id);
+      show('signin');
+      return;
+    }
     show('offline', { profile, notice: 'To use this profile offline, add your own TMDB token.' });
     return;
   }
