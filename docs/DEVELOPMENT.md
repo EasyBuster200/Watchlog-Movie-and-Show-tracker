@@ -139,10 +139,10 @@ is how Watchlog runs on an iPhone without the App Store: open the site in Safari
 
 ### Hosting on Cloudflare
 
-The site is hosted for free as a [Cloudflare Worker](https://developers.cloudflare.com/workers/static-assets/)
-that only serves static files, deployed from GitHub. `wrangler.jsonc` (repository root) names the
-Worker `watchlog` and points it at `public/`. The accounts and sync API planned in the roadmap
-will be added to this same Worker.
+The site is hosted for free as a [Cloudflare Worker](https://developers.cloudflare.com/workers/static-assets/),
+deployed from GitHub. `wrangler.jsonc` (repository root) names the Worker `watchlog`, points it at
+`public/` for the app's files, and at `server/src/index.js` for the server (see
+[The server](#the-server)).
 
 One-time setup in the Cloudflare dashboard: **Workers & Pages → Create → Import a repository**,
 pick this repository, then:
@@ -150,22 +150,92 @@ pick this repository, then:
 | Setting | Value |
 |---|---|
 | Project name | `watchlog` (must match `name` in `wrangler.jsonc`) |
-| Build command | `node tools/write-web-version.js` |
-| Deploy command | `npx wrangler deploy` |
+| Build command | `npm run cf:build` (on **both** tabs, see below) |
+| Deploy command | `npm run cf:deploy` |
 | Preview command | `npx wrangler preview` |
 | Preview builds | On |
+
+Afterwards these live in the Worker's **Settings → Builds**, which has two tabs with separate
+settings: **Production** (build and deploy command, used for `main`) and **Previews Base**
+(build and preview command, used for every other branch). A change on one tab doesn't reach the
+other, so the build command has to be `npm run cf:build` on both.
+
+Two more traps in that page:
+
+- **Each preview copies Previews Base when it's created and keeps that copy.** Changing Previews
+  Base only affects branches pushed for the first time afterwards. An existing preview has its
+  own **Build configuration** on its own Settings page (switch from Production to the branch at
+  the top of the dashboard); change it there, or delete the preview and push again.
+- Every section saves separately (the **Save** in the "Unsaved changes" bar), and the
+  Production / Previews Base switch has been seen showing the other tab's values. After a change,
+  reload the page and check both tabs.
 
 Every push to `main` then deploys the site, live at **https://watchlog.duartecruzcoelho.workers.dev**,
 and every other branch gets its own preview address, `https://<branch>-watchlog.<subdomain>.workers.dev`
 (the pull request's "Workers Builds" check links to the build, whose **Visit** button opens it),
 which can be opened on a phone to try a change before merging. `wrangler preview` refuses to run
-without the `"previews": {}` block in `wrangler.jsonc`, so keep it. A preview's version number
-counts the branch's own commits, so it can be higher than what `main` gets after a squash merge. Wrangler isn't a dependency of this
-repository: Cloudflare's build runs it with `npx` (it needs a newer Node than the Node 18 the
-project supports).
+without the `previews` block in `wrangler.jsonc`, so keep it. A preview's version number counts
+the branch's own commits, so it can be higher than what `main` gets after a squash merge.
+
+The build command runs for every build, previews and `main` alike: `cf:build` (`package.json`)
+writes `version.json` and applies the database migrations to the **preview** database. Only
+`main` then runs the deploy command, `cf:deploy`, which applies them to the **production**
+database before deploying. Previews run the preview command, `npx wrangler preview`, which never
+touches the production database. Keeping
+the commands in `package.json` means changing them doesn't need the dashboard. Wrangler isn't a dependency of
+this repository: Cloudflare's build runs it with `npx` (it needs a newer Node than the Node 18 the
+app's tooling supports).
 
 Cloudflare serves `page.html` at `/page` and redirects to it. The service worker caches pages
 without the `.html`, so both addresses work offline.
+
+### The server
+
+The same Worker runs a small server for the features in the [roadmap](ROADMAP.md) (accounts, sync,
+friends). It's plain JavaScript with no dependencies, in `server/`:
+
+- **`server/src/index.js`** is the entry point. Cloudflare serves a file from `public/` when one
+  matches the address; only when none does, this runs: `/v1/...` goes to the API (`api.js`),
+  anything else back to the static files (which answer 404).
+- **`server/src/api.js`**: the API lives under **`/v1/`**, not `/api/`, because the app's own
+  `localApi.js` answers every `/api/...` request on the device. Responses are JSON; errors are
+  `{ error, message }` and never include internals (those go to the Worker's logs, in the
+  dashboard under the Worker's **Observability** tab). For now there's one route,
+  `GET /v1/health`, which says whether the database answers and which migration it's on, e.g.
+  https://watchlog.duartecruzcoelho.workers.dev/v1/health.
+- **CORS:** pages on the site's own address (including previews) can call the API; other origins
+  only if listed in `ALLOWED_ORIGINS` (`wrangler.jsonc`), currently the Android app's
+  `https://localhost`. CORS isn't authentication; that comes with accounts.
+- The web app's service worker never caches `/v1/` responses.
+
+#### Server database
+
+A [D1](https://developers.cloudflare.com/d1/) database (SQLite), bound as `DB`. Production uses
+`watchlog`; previews use `watchlog-preview`, so trying a pull request never touches real data.
+Both are named in `wrangler.jsonc`, and the preview one also in `wrangler.preview-db.jsonc`
+(used to apply migrations to it); `tests/server-config.test.js` checks they match.
+
+- **Changing the database structure:** add a numbered file to `server/migrations/`
+  (`0002_accounts.sql`, ...). Every deploy applies the new ones before the code goes live, and D1
+  records what's applied in its `d1_migrations` table. Never edit a migration that has already
+  been applied: add another one.
+- **Backups:** D1's [Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/) can
+  restore the database to any minute of the last 7 days. On top of that, every Sunday at 03:00 UTC
+  the Worker's Cron Trigger copies the whole database to the R2 bucket `BACKUPS`
+  (`server/src/backup.js`) as `d1/watchlog-<time>.json`, keeping the newest 5. The new copy is
+  written before old ones are deleted. Crons don't run in previews.
+- **Restoring a weekly copy:** download it from the R2 bucket in the dashboard, then
+  `node tools/backup-to-sql.js <file>.json > restore.sql` and
+  `npx wrangler d1 execute watchlog --remote --file restore.sql`, into an empty database (a new
+  one, or after dropping the tables). For anything within the last week, Time Travel is simpler:
+  `npx wrangler d1 time-travel restore watchlog --timestamp <time>`.
+
+#### Server tests
+
+`npm run test:server` runs `server/test/`. The database there is real SQLite (`node:sqlite`,
+which needs **Node 22.5+**, so these tests are separate from `npm test`) with the migrations
+applied the way Wrangler does; R2 and the static files are small in-memory stand-ins. CI runs
+both suites in the one `test` check.
 
 ### Testing on iPhone without a Mac
 
@@ -244,7 +314,10 @@ android/           Capacitor's native Android project. Hand-written parts: MainA
                    WatchlogBackgroundPlugin.java, EpisodeCheckWorker.java, app/build.gradle
                    (versioning and signing), the launcher and notification icons
 tests/             Node test suite (npm test)
-tools/             write-web-version.js (version.json for the web deploy)
+server/            the Worker's server code: src/ (index.js, api.js, backup.js), migrations/
+                   (database changes), test/ (npm run test:server)
+tools/             write-web-version.js (version.json for the web deploy), backup-to-sql.js
+                   (restores a weekly database copy)
 docs/              this guide, design/ (the design system's tokens.json and reference
                    component CSS), screenshots/, icons/ (Material Symbols reference SVGs and
                    the app icon artwork)

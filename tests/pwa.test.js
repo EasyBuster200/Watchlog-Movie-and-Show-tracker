@@ -45,6 +45,28 @@ test('cached pages are found with or without .html, and whatever the query strin
   assert.equal(cacheKey('https://watchlog.example/scripts/media.js'), 'https://watchlog.example/scripts/media.js');
 });
 
+test('the service worker never answers the server API (/v1/) or version.json', () => {
+  const listeners = {};
+  const context = {
+    self: { addEventListener: (type, fn) => { listeners[type] = fn; }, location: { href: 'https://watchlog.example/sw.js', origin: 'https://watchlog.example' } },
+    caches: { open: async () => ({ match: async () => undefined, put: async () => {} }) },
+    fetch: async () => new Response('network'),
+    URL, Response, setTimeout,
+  };
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync(path.join(PUBLIC_DIR, 'sw.js'), 'utf8'), context);
+  const handled = url => {
+    let answered = false;
+    listeners.fetch({ request: { method: 'GET', url }, respondWith: () => { answered = true; } });
+    return answered;
+  };
+  assert.equal(handled('https://watchlog.example/v1/health'), false);
+  assert.equal(handled('https://watchlog.example/v1'), false);
+  assert.equal(handled('https://watchlog.example/version.json'), false);
+  assert.equal(handled('https://api.themoviedb.org/3/movie/1'), false, 'other sites');
+  assert.equal(handled('https://watchlog.example/main.html'), true, 'the app\'s own files');
+});
+
 test('the manifest names the app and its icons exist', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(PUBLIC_DIR, 'manifest.webmanifest'), 'utf8'));
   assert.equal(manifest.name, 'Watchlog');

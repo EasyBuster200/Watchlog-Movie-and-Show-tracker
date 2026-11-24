@@ -1,6 +1,6 @@
 # Watchlog plan: web app, accounts, sync, friends, admin
 
-Status: **Phase 1 (web app) is done and live at https://watchlog.duartecruzcoelho.workers.dev. Later phases not started.** This file collects what has been decided so far and the order to build it in. Update it as decisions change.
+Status: **Phase 1 (web app) is done and live at https://watchlog.duartecruzcoelho.workers.dev. Phase 2 (server foundation) is built. Later phases not started.** This file collects what has been decided so far and the order to build it in. Update it as decisions change.
 
 ## Goals
 
@@ -80,6 +80,8 @@ Do this first: it works with today's local profiles and needs no backend.
 **Why first:** it's the cheapest way to get the iPhone working, and every later phase builds on the hosted app.
 
 ## Phase 2: Backend foundation
+
+**Built.** Details in `docs/DEVELOPMENT.md` ("The server"). What changed from the plan below: the API is under `/v1/` on the same address as the app (the app's own shim owns `/api/`); "two environments" are production and previews (every pull request's preview gets the `watchlog-preview` database); the weekly R2 copy keeps the newest 5; no secrets yet (none is needed until Phase 3). Not done yet: CORS for the Android app is configured but untested from the real app, since nothing calls the server yet.
 
 1. Give the existing **`watchlog` Worker** (`wrangler.jsonc`, which only serves `public/` today) a script for `/api/*`, e.g. in `server/`. Same domain as the app, so no separate subdomain.
 2. A **D1 database** with migrations checked into the repo.
