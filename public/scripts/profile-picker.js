@@ -2,22 +2,28 @@
 // time:
 //   home      Who's watching? - the profiles on this device (Edit / Delete), Sign in, Offline
 //             profile, Import backup
-//   offline   New offline profile (display name + TMDB token); also Edit profile, and the last
-//             step of restoring a backup (backups never contain the token - see backup.js)
+//   offline   New offline profile (display name + TMDB token); also Edit profile (an online
+//             profile's token is optional: it uses the server's), the last step of restoring a
+//             backup (backups never contain the token - see backup.js), and adding a token to a
+//             signed-out online profile kept as an offline copy
 //   import    Import a backup: choose the .json file
 //   restore   Ready to restore: what's in the file, then restore it as an offline profile
-//   signin / create / recover / inbox
-//             Online accounts (roadmap Phase 3: an account key, with an optional recovery email).
-//             The server side isn't built yet, so these are hidden behind ONLINE_ACCOUNTS
-//             (decided with the user): no button leads to them while it's off.
+//   Online accounts (roadmap Phase 3; calls in serverApi.js):
+//   signin    Sign in with the account key
+//   pair      Sign in with a one-time code from a signed-in device
+//   create    Create an account: just a name, then save-key
+//   Online profiles need no TMDB token: they use the server's TMDB proxy, which has the owner's
+//   (localApi.js's tmdbAccess). Only offline profiles bring their own.
+//   save-key  The account key, with Copy / Save as file and a "type the last 4" check. Also
+//             opened from Settings: profile-picker.html?screen=save-key&profile=<id>&next=<page>
+//   recover / inbox
+//             The recovery email (roadmap Phase 3c); not built yet, so they say so.
+//   Hidden behind onlineAccountsEnabled() (serverApi.js) until syncing exists (decided with the
+//   user): no button leads to them while it's off.
 //
 // The screens are plain DOM built from media.js's helpers (ttIcon, buildTextField, el).
 
-// Online accounts: off until the server has accounts. For checking the screens during
-// development, set localStorage 'watchlog_preview_online_accounts' to '1'.
-const ONLINE_ACCOUNTS = (() => {
-  try { return localStorage.getItem('watchlog_preview_online_accounts') === '1'; } catch (error) { return false; }
-})();
+const ONLINE_ACCOUNTS = onlineAccountsEnabled();
 
 const authEl = document.getElementById('auth');
 const importInput = document.getElementById('import-backup-input');
@@ -105,10 +111,11 @@ function show(screen, opts = {}) {
 
 function profileMeta(profile) {
   const meta = el('span', 'auth-profile__meta');
-  // Online accounts (Phase 3) will carry an `account` on the profile; everything today is local.
+  // An online profile carries its `account` (serverApi.js). Syncing comes with roadmap Phase 4,
+  // so it says "Online account", not "Synced", until then.
   if (profile.account) {
     meta.innerHTML = ttIcon('cloud', { size: 14 });
-    meta.appendChild(document.createTextNode(`Synced${profile.account.email ? ` · ${profile.account.email}` : ''}`));
+    meta.appendChild(document.createTextNode(isSignedIn(profile) ? 'Online account' : 'Online account · signed out'));
   } else {
     meta.innerHTML = ttIcon('lock', { size: 14 });
     meta.appendChild(document.createTextNode('Offline · this device only'));
@@ -116,14 +123,39 @@ function profileMeta(profile) {
   return meta;
 }
 
+// A signed-out online profile signs in again; a profile with neither a session nor its own
+// token (an offline copy kept at sign-out) gets a token first. Everything else just opens.
+function openProfileFromList(profile) {
+  if (profile.account && !isSignedIn(profile) && !profile.tmdbApiKey) {
+    setActiveProfileId(profile.id);
+    show('signin');
+    return;
+  }
+  if (!profile.account && !profile.tmdbApiKey) {
+    // A copy kept when signing out: signing in again reattaches it (profileForAccount).
+    if (profile.formerAccountId && ONLINE_ACCOUNTS) {
+      setActiveProfileId(profile.id);
+      show('signin');
+      return;
+    }
+    show('offline', { profile, notice: 'To use this profile offline, add your own TMDB token.' });
+    return;
+  }
+  setActiveProfileId(profile.id);
+  window.location.href = 'main.html';
+}
+
 async function deleteWithConfirm(profile) {
   const ok = await confirmDialog({
     title: `Delete ${profile.displayName}?`,
-    message: 'This deletes the profile and everything it has tracked on this device. It can\'t be undone.',
+    message: profile.account
+      ? 'This deletes the profile and everything it has tracked on this device, and signs this device out of the online account. The account itself isn\'t deleted.'
+      : 'This deletes the profile and everything it has tracked on this device. It can\'t be undone.',
     confirmLabel: 'Delete',
     danger: true,
   });
   if (!ok) return;
+  if (profile.account) await signOutOnlineAccount(profile).catch(() => {});
   deleteProfile(profile.id);
   show('home');
 }
@@ -139,10 +171,7 @@ function renderHome() {
       const open = el('button', 'auth-profile__open');
       open.type = 'button';
       open.setAttribute('aria-label', `Open ${profile.displayName}`);
-      open.addEventListener('click', () => {
-        setActiveProfileId(profile.id);
-        window.location.href = 'main.html';
-      });
+      open.addEventListener('click', () => openProfileFromList(profile));
       open.appendChild(el('span', 'auth-profile__avatar', initials(profile.displayName)));
       const text = el('span', 'auth-profile__text');
       text.appendChild(el('span', 'auth-profile__name', profile.displayName));
@@ -174,7 +203,9 @@ function renderHome() {
 
 // ---------- New offline profile / Edit / last step of a restore ----------
 
-function renderOfflineForm({ profile = null, restore = null } = {}) {
+function renderOfflineForm({ profile = null, restore = null, notice = null } = {}) {
+  // A signed-in online profile reaches TMDB through the server, so its own token is optional.
+  const tokenOptional = Boolean(profile && isSignedIn(profile));
   authEl.appendChild(backButton(() => show(restore ? 'restore' : 'home')));
   const title = restore ? 'Finish restoring' : profile ? 'Edit profile' : 'New offline profile';
   const text = restore
@@ -182,6 +213,12 @@ function renderOfflineForm({ profile = null, restore = null } = {}) {
     : profile ? 'Change the name or the TMDB token this profile uses.'
       : 'No account, no email. Just a name and your own TMDB token.';
   authEl.appendChild(authHead({ title, text }));
+  if (notice) {
+    const note = el('div', 'auth__note');
+    note.innerHTML = ttIcon('lock', { size: 18 });
+    note.appendChild(el('span', null, notice));
+    authEl.appendChild(note);
+  }
 
   const form = el('form', 'auth__form');
   form.noValidate = true;
@@ -191,8 +228,9 @@ function renderOfflineForm({ profile = null, restore = null } = {}) {
   });
   const tokenField = buildTextField({
     label: 'TMDB API Read Access Token', type: 'password', icon: 'lock', placeholder: 'Paste your token',
-    autocomplete: 'off', helper: 'The long token on themoviedb.org → Settings → API',
-    value: restore ? (legacyBackupApiKey(restore.payload) || '') : profile ? profile.tmdbApiKey : '',
+    autocomplete: 'off',
+    helper: tokenOptional ? 'Optional: this online profile uses Watchlog\'s. Only needed to use it offline.' : 'The long token on themoviedb.org → Settings → API',
+    value: restore ? (legacyBackupApiKey(restore.payload) || '') : profile ? (profile.tmdbApiKey || '') : '',
   });
   tokenField.input.spellcheck = false;
   form.appendChild(nameField);
@@ -218,11 +256,11 @@ function renderOfflineForm({ profile = null, restore = null } = {}) {
     const displayName = nameField.input.value.trim();
     const tmdbApiKey = tokenField.input.value.trim();
     nameField.setError(displayName ? null : 'Enter a name.');
-    tokenField.setError(tmdbApiKey ? null : 'Paste your TMDB token.');
+    tokenField.setError(tmdbApiKey || tokenOptional ? null : 'Paste your TMDB token.');
     error.show('');
-    if (!displayName || !tmdbApiKey) return;
+    if (!displayName || (!tmdbApiKey && !tokenOptional)) return;
 
-    const keyChanged = !profile || profile.tmdbApiKey !== tmdbApiKey;
+    const keyChanged = Boolean(tmdbApiKey) && (!profile || profile.tmdbApiKey !== tmdbApiKey);
     const label = submit.textContent;
     submit.disabled = true;
     try {
@@ -242,8 +280,9 @@ function renderOfflineForm({ profile = null, restore = null } = {}) {
         window.location.href = 'main.html';
         return;
       }
-      if (profile) updateProfile(profile.id, { displayName, tmdbApiKey });
+      if (profile) updateProfile(profile.id, { displayName, tmdbApiKey: tmdbApiKey || null });
       else createProfile({ displayName, tmdbApiKey });
+      if (notice && profile) { openProfileFromList(getProfiles().find(p => p.id === profile.id)); return; }
       show('home');
     } catch (err) {
       console.error('Saving profile failed:', err);
@@ -335,24 +374,54 @@ function renderRestore() {
 
   const actions = el('div', 'auth__actions');
   actions.appendChild(button('Restore as offline profile', 'primary', () => show('offline', { restore: pendingRestore })));
-  if (ONLINE_ACCOUNTS) actions.appendChild(button('Sign in and restore to my account', 'secondary', () => show('signin')));
+  if (ONLINE_ACCOUNTS) actions.appendChild(button('Sign in and restore to my account', 'secondary', () => show('signin', { restore: pendingRestore })));
   authEl.appendChild(actions);
   authEl.appendChild(el('p', 'auth__fine', legacyBackupApiKey(payload)
     ? 'This backup has a TMDB token; you can check it on the next step.'
     : "The backup has no TMDB token, so we'll ask for one next."));
 }
 
-// ---------- Online accounts (hidden until the server has them) ----------
+// ---------- Online accounts (serverApi.js; hidden until syncing exists) ----------
 
-const ACCOUNTS_NOT_READY = "Online accounts aren't available yet. Use an offline profile for now.";
+// Opens a profile, or the page that sent us here (Settings, after saving a new key).
+function openProfile(profileId, next = 'main.html') {
+  setActiveProfileId(profileId);
+  window.location.href = next;
+}
 
-function renderSignIn() {
-  authEl.appendChild(backButton(() => show('home')));
-  authEl.appendChild(authHead({ title: 'Welcome back', text: 'Sign in to sync your shows, movies and lists.', centred: true }));
+// After a sign-in (key or code): the account's existing profile on this device, if any, just
+// gets the new session; otherwise a new profile is made for it (named after the account, no TMDB
+// token needed), or the backup being restored becomes that profile.
+async function afterSignIn(signIn, { accountKey = null, restore = null } = {}) {
+  const existing = profileForAccount(signIn.account.id);
+  if (existing && !restore) {
+    linkProfileToAccount(existing.id, signIn, { accountKey, keySaved: Boolean(accountKey) });
+    openProfile(existing.id);
+    return;
+  }
+  let profile;
+  if (restore) {
+    profile = await restoreBackup(restore.payload, { displayName: restore.payload.profile.displayName, tmdbApiKey: null });
+    pendingRestore = null;
+  } else {
+    profile = createProfile({ displayName: signIn.account.displayName, tmdbApiKey: null });
+  }
+  // Typing the key to sign in shows it was saved.
+  linkProfileToAccount(profile.id, signIn, { accountKey, keySaved: Boolean(accountKey) });
+  openProfile(profile.id);
+}
+
+function renderSignIn({ restore = null } = {}) {
+  authEl.appendChild(backButton(() => show(restore ? 'restore' : 'home')));
+  authEl.appendChild(authHead({
+    title: 'Welcome back',
+    text: restore ? 'Sign in, and the backup is restored into your account on this device.' : 'Sign in with your account key.',
+    centred: true,
+  }));
   const form = el('form', 'auth__form');
   form.noValidate = true;
   const keyField = buildTextField({
-    label: 'Account key', type: 'password', icon: 'lock', placeholder: 'WLG4-7KQ2-…', autocomplete: 'off',
+    label: 'Account key', type: 'password', icon: 'lock', placeholder: 'XXXX-XXXX-…', autocomplete: 'off',
     aside: linkButton('Lost your key?', () => show('recover')),
   });
   keyField.input.spellcheck = false;
@@ -360,19 +429,69 @@ function renderSignIn() {
   form.appendChild(keyField);
   const error = errorLine();
   form.appendChild(error);
-  form.appendChild(button('Sign in', 'primary', null, { type: 'submit' }));
-  form.addEventListener('submit', event => {
+  const submit = button('Sign in', 'primary', null, { type: 'submit' });
+  form.appendChild(submit);
+  form.addEventListener('submit', async event => {
     event.preventDefault();
-    if (!keyField.input.value.trim()) { keyField.setError('Enter your account key.'); return; }
+    const accountKey = keyField.input.value.trim();
+    if (!accountKey) { keyField.setError('Enter your account key.'); return; }
     keyField.setError(null);
-    error.show(ACCOUNTS_NOT_READY);
+    error.show('');
+    submit.disabled = true;
+    try {
+      await afterSignIn(await signInWithAccountKey(accountKey), { accountKey, restore });
+    } catch (err) {
+      if (err.code === 'invalid_key_format' || err.code === 'wrong_key') keyField.setError(err.message);
+      else error.show(err.message || 'Something went wrong. Try again.');
+    } finally {
+      submit.disabled = false;
+    }
   });
   authEl.appendChild(form);
-  const or = el('div', 'auth__or');
-  or.appendChild(el('span', null, 'or'));
-  authEl.appendChild(or);
-  authEl.appendChild(secondaryPair());
-  authEl.appendChild(promptLine('New to Watchlog?', 'Create an account', () => show('create')));
+  authEl.appendChild(promptLine('Signed in on another device?', 'Use a code from it', () => show('pair', { restore })));
+  if (!restore) {
+    const or = el('div', 'auth__or');
+    or.appendChild(el('span', null, 'or'));
+    authEl.appendChild(or);
+    authEl.appendChild(secondaryPair());
+    authEl.appendChild(promptLine('New to Watchlog?', 'Create an account', () => show('create')));
+  }
+}
+
+function renderPair({ restore = null } = {}) {
+  authEl.appendChild(backButton(() => show('signin', { restore })));
+  authEl.appendChild(authHead({
+    title: 'Use a code',
+    text: 'On a device that is already signed in, open Settings → Add a device. Enter the code it shows.',
+  }));
+  const form = el('form', 'auth__form');
+  form.noValidate = true;
+  const codeField = buildTextField({ label: 'Device code', icon: 'lock', placeholder: 'XXXX-XXXX', autocomplete: 'one-time-code', maxLength: 12 });
+  codeField.input.spellcheck = false;
+  codeField.input.autocapitalize = 'characters';
+  form.appendChild(codeField);
+  const error = errorLine();
+  form.appendChild(error);
+  const submit = button('Sign in', 'primary', null, { type: 'submit' });
+  form.appendChild(submit);
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const code = codeField.input.value.trim();
+    if (!code) { codeField.setError('Enter the code from your other device.'); return; }
+    codeField.setError(null);
+    error.show('');
+    submit.disabled = true;
+    try {
+      await afterSignIn(await signInWithPairingCode(code), { restore });
+    } catch (err) {
+      if (err.code === 'invalid_code_format' || err.code === 'wrong_code') codeField.setError(err.message);
+      else error.show(err.message || 'Something went wrong. Try again.');
+    } finally {
+      submit.disabled = false;
+    }
+  });
+  authEl.appendChild(form);
+  authEl.appendChild(el('p', 'auth__fine', 'Codes work once and expire after 10 minutes.'));
 }
 
 function renderCreate() {
@@ -381,25 +500,115 @@ function renderCreate() {
   const form = el('form', 'auth__form');
   form.noValidate = true;
   const nameField = buildTextField({ label: 'Name', icon: 'user', placeholder: 'Your name', autocomplete: 'nickname', maxLength: 40 });
-  const emailField = buildTextField({
-    label: 'Recovery email', type: 'email', icon: 'mail', placeholder: 'you@example.com', autocomplete: 'email',
-    helper: 'Optional. Only used if you lose your account key.', inputMode: 'email',
-  });
   form.appendChild(nameField);
-  form.appendChild(emailField);
   const error = errorLine();
   form.appendChild(error);
-  form.appendChild(button('Create account', 'primary', null, { type: 'submit' }));
-  form.appendChild(el('p', 'auth__fine', "Next, you'll get an account key: a long code that signs you in on any device. Keep it somewhere safe."));
-  form.addEventListener('submit', event => {
+  const submit = button('Create account', 'primary', null, { type: 'submit' });
+  form.appendChild(submit);
+  form.appendChild(el('p', 'auth__fine', "Next, you'll get an account key: a long code that signs you in on any device. Keep it somewhere safe. A recovery email is coming in an update."));
+  form.addEventListener('submit', async event => {
     event.preventDefault();
-    if (!nameField.input.value.trim()) { nameField.setError('Enter a name.'); return; }
-    nameField.setError(null);
-    error.show(ACCOUNTS_NOT_READY);
+    const displayName = nameField.input.value.trim();
+    nameField.setError(displayName ? null : 'Enter a name.');
+    if (!displayName) return;
+    error.show('');
+    submit.disabled = true;
+    try {
+      const created = await createOnlineAccount(displayName);
+      const profile = createProfile({ displayName: created.account.displayName, tmdbApiKey: null });
+      linkProfileToAccount(profile.id, created, { accountKey: created.accountKey });
+      show('save-key', { profileId: profile.id });
+    } catch (err) {
+      console.error('Creating an account failed:', err);
+      error.show(err.message || 'Something went wrong. Try again.');
+    } finally {
+      submit.disabled = false;
+    }
   });
   authEl.appendChild(form);
   authEl.appendChild(promptLine('Already have an account?', 'Sign in', () => show('signin')));
 }
+
+function keyFileText(profile) {
+  return [
+    'Watchlog account key',
+    '',
+    profile.account.accountKey,
+    '',
+    `Account: ${profile.account.displayName}`,
+    `Saved: ${new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}`,
+    '',
+    'This key signs in to your Watchlog account on any device.',
+    'Keep it private, like a password: anyone who has it can sign in.',
+    '',
+  ].join('\n');
+}
+
+// The new account key: shown once here, saved, and checked by typing its last 4 characters.
+function renderSaveKey({ profileId, next = 'main.html' }) {
+  const profile = getProfiles().find(p => p.id === profileId);
+  if (!profile || !profile.account || !profile.account.accountKey) { show('home'); return; }
+  const key = profile.account.accountKey;
+
+  const head = el('div', 'auth__head auth__head--centred');
+  const badge = el('div', 'auth__badge');
+  badge.innerHTML = ttIcon('lock', { size: 24 });
+  head.appendChild(badge);
+  head.appendChild(el('h1', 'auth__title', 'Save your account key'));
+  head.appendChild(el('p', 'auth__text', 'It signs you in on any device. Watchlog can\'t show it to you again on another device, so keep it somewhere safe: a password manager, your files, or on paper.'));
+  authEl.appendChild(head);
+
+  const keyBox = el('div', 'auth-key');
+  keyBox.setAttribute('aria-label', 'Account key');
+  key.split('-').forEach(group => keyBox.appendChild(el('span', 'auth-key__group', group)));
+  authEl.appendChild(keyBox);
+
+  const status = el('p', 'auth__fine');
+  const actions = el('div', 'auth__pair');
+  actions.appendChild(button('Copy', 'secondary', async () => {
+    try {
+      await navigator.clipboard.writeText(key);
+      status.textContent = 'Copied.';
+    } catch (err) {
+      status.textContent = "Couldn't copy. Select the key and copy it, or save it as a file.";
+    }
+  }, { icon: 'copy' }));
+  actions.appendChild(button('Save as file', 'secondary', async () => {
+    try {
+      if (await saveTextFile(keyFileText(profile), 'watchlog-account-key.txt', { title: 'Watchlog account key' })) status.textContent = 'Saved.';
+    } catch (err) {
+      console.error('Saving the key failed:', err);
+      status.textContent = "Couldn't save the file. Copy the key instead.";
+    }
+  }, { icon: 'folder' }));
+  authEl.appendChild(actions);
+  authEl.appendChild(status);
+
+  const form = el('form', 'auth__form');
+  form.noValidate = true;
+  const confirmField = buildTextField({
+    label: `Type the last ${KEY_CONFIRM_LENGTH} characters of your key`, icon: 'check', placeholder: '····', autocomplete: 'off', maxLength: 8,
+    helper: 'To make sure it was saved correctly.',
+  });
+  confirmField.input.spellcheck = false;
+  confirmField.input.autocapitalize = 'characters';
+  form.appendChild(confirmField);
+  form.appendChild(button("I've saved it", 'primary', null, { type: 'submit' }));
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    if (!accountKeyConfirmMatches(key, confirmField.input.value)) {
+      confirmField.setError("That doesn't match the end of the key. Check what you saved.");
+      return;
+    }
+    markAccountKeySaved(profileId);
+    openProfile(profileId, next);
+  });
+  authEl.appendChild(form);
+  authEl.appendChild(promptLine('Not now?', 'Remind me later in Settings', () => openProfile(profileId, next)));
+}
+
+// The recovery email is roadmap Phase 3c (it needs a domain to send from).
+const RECOVERY_NOT_READY = "Recovery emails aren't available yet. If you're signed in on another device, use Settings → Add a device there.";
 
 function renderRecover() {
   authEl.appendChild(backButton(() => show('signin')));
@@ -416,13 +625,13 @@ function renderRecover() {
     const email = emailField.input.value.trim();
     if (!/^\S+@\S+\.\S+$/.test(email)) { emailField.setError('Enter the email address on your account.'); return; }
     emailField.setError(null);
-    error.show(ACCOUNTS_NOT_READY);
+    error.show(RECOVERY_NOT_READY);
   });
   authEl.appendChild(form);
-  authEl.appendChild(promptLine('Found it?', 'Back to sign in', () => show('signin')));
+  authEl.appendChild(promptLine('Signed in on another device?', 'Use a code from it', () => show('pair')));
 }
 
-// Shown once the server has sent a recovery code (not reachable until accounts exist).
+// Shown once the server has sent a recovery code (not reachable until Phase 3c).
 function renderInbox({ email = '' } = {}) {
   authEl.appendChild(backButton(() => show('recover')));
   const head = el('div', 'auth__head auth__head--centred');
@@ -445,9 +654,27 @@ const SCREENS = {
   import: renderImport,
   restore: renderRestore,
   signin: renderSignIn,
+  pair: renderPair,
   create: renderCreate,
+  'save-key': renderSaveKey,
   recover: renderRecover,
   inbox: renderInbox,
 };
 
-show('home');
+// Other pages can open a screen directly: ?screen=save-key&profile=<id>&next=settings.html
+// (Settings, after a new key), ?screen=offline&profile=<id>&notice=token (a signed-out copy
+// that needs its own token), or ?screen=signin (a signed-out profile).
+(function start() {
+  const params = new URLSearchParams(window.location.search);
+  const screen = params.get('screen');
+  const profileParam = params.get('profile') && getProfiles().find(p => p.id === params.get('profile'));
+  if (screen === 'offline' && profileParam) {
+    show('offline', { profile: profileParam, notice: params.get('notice') === 'token' ? "You're signed out, so this copy needs your own TMDB token to keep working offline." : null });
+  } else if (screen === 'save-key' && params.get('profile')) {
+    show('save-key', { profileId: params.get('profile'), next: params.get('next') || 'main.html' });
+  } else if (ONLINE_ACCOUNTS && (screen === 'signin' || screen === 'create')) {
+    show(screen);
+  } else {
+    show('home');
+  }
+})();

@@ -5,10 +5,11 @@
 //
 // Fully local now — every route below (lists/watched/favorites/stats/recommendations)
 // is handled here against the active profile's IndexedDB, plus the TMDB passthrough
-// (`/api/tmdb/*`), where each profile calls TMDB directly using its own locally-stored API key
+// (`/api/tmdb/*`). An offline profile calls TMDB directly using its own locally-stored API key
 // (TMDB sends `access-control-allow-origin: *`, so this works from a browser/WebView with no
-// server in between). There is no remaining server-backed fallback — see route()/matchPath()
-// below for the full list of handled paths.
+// server in between); a signed-in online profile goes through the Watchlog server's TMDB proxy
+// instead, which uses the owner's token (tmdbAccess below). See route()/matchPath() below for
+// the full list of handled paths.
 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const originalFetch = window.fetch.bind(window);
@@ -111,21 +112,44 @@ function localizeTmdbPath(pathWithQuery, profile = getActiveProfile()) {
   return `${path}?${params.toString()}`;
 }
 
+// Where a profile's TMDB requests go. An online profile that's signed in uses the Watchlog
+// server's proxy (/v1/tmdb, the owner's TMDB token; serverApi.js gives the address); an offline
+// profile, or one that's signed out but has its own token, calls TMDB directly with that token.
+// Both take the same `Authorization: Bearer` header. Null when the profile has neither.
+function tmdbAccess(profile) {
+  if (!profile) return null;
+  if (profile.account && profile.account.sessionToken && typeof serverBaseUrl === 'function') {
+    return { base: `${serverBaseUrl()}/v1/tmdb`, token: profile.account.sessionToken, viaServer: true };
+  }
+  if (profile.tmdbApiKey) return { base: TMDB_BASE_URL, token: profile.tmdbApiKey, viaServer: false };
+  return null;
+}
+
+// The proxy said this device is signed out: forget the session, so Settings and the profile
+// picker offer to sign in again (serverApi.js's accountRequest does the same).
+function noteProxySignedOut(profile, response) {
+  if (response.status !== 401 || typeof updateProfile !== 'function') return;
+  const current = getProfiles().find(p => p.id === profile.id);
+  if (current && current.account) updateProfile(profile.id, { account: { ...current.account, sessionToken: null } });
+}
+
 async function handleTmdbPassthrough(pathname, search) {
   const profile = getActiveProfile();
-  if (!profile || !profile.tmdbApiKey) {
+  const access = tmdbAccess(profile);
+  if (!access) {
     return jsonErrorResponse('No TMDB API key configured for this profile', 401);
   }
 
   const tmdbPath = pathname.slice('/api/tmdb'.length);
-  const url = `${TMDB_BASE_URL}${localizeTmdbPath(`${tmdbPath}${search}`, profile)}`;
+  const url = `${access.base}${localizeTmdbPath(`${tmdbPath}${search}`, profile)}`;
 
   return queueTmdbRequest(async () => {
     try {
       const response = await tmdbFetchWithTimeout(url, {
         accept: 'application/json',
-        Authorization: `Bearer ${profile.tmdbApiKey}`,
+        Authorization: `Bearer ${access.token}`,
       });
+      if (access.viaServer) noteProxySignedOut(profile, response);
       if (!response.ok) return response;
       return jsonResponse(stripAdultItems(await response.json()), response.status);
     } catch (error) {
@@ -262,7 +286,8 @@ function fetchLocalTmdb(tmdbPath) {
 // no longer permanently loses that item's poster/title/rating.
 async function fetchLocalTmdbUncached(tmdbPath) {
   const profile = getActiveProfile();
-  if (!profile || !profile.tmdbApiKey) return null;
+  const access = tmdbAccess(profile);
+  if (!access) return null;
 
   const detailMatch = tmdbPath.match(TMDB_DETAIL_PATH_RE);
   // Cached per language, so switching language doesn't keep serving the old one's titles.
@@ -275,12 +300,13 @@ async function fetchLocalTmdbUncached(tmdbPath) {
   }
 
   const result = await queueTmdbRequest(async () => {
-    const url = `${TMDB_BASE_URL}${localizeTmdbPath(tmdbPath, profile)}`;
-    const headers = { accept: 'application/json', Authorization: `Bearer ${profile.tmdbApiKey}` };
+    const url = `${access.base}${localizeTmdbPath(tmdbPath, profile)}`;
+    const headers = { accept: 'application/json', Authorization: `Bearer ${access.token}` };
     for (let attempt = 0; attempt <= TMDB_MAX_RETRIES; attempt++) {
       const isLastAttempt = attempt === TMDB_MAX_RETRIES;
       try {
         const response = await tmdbFetchWithTimeout(url, headers);
+        if (access.viaServer) noteProxySignedOut(profile, response);
         if (response.ok) return stripAdultItems(await response.json());
         // 429 (rate-limited) and 5xx are worth retrying; 404/401/etc are not.
         if (isLastAttempt || (response.status !== 429 && response.status < 500)) return null;

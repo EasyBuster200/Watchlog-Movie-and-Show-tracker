@@ -169,9 +169,31 @@ test('after scheduling, the background check gets the profile key and every trac
   const config = app.background.last();
   assert.equal(config.enabled, true);
   assert.equal(config.apiKey, 'test-key');
+  assert.equal(config.tmdbBaseUrl, 'https://api.themoviedb.org/3', 'an offline profile asks TMDB directly');
   assert.equal(config.notifyHour, 18);
   assert.equal(config.smallIcon, 'ic_stat_tvtc');
   assert.deepEqual(config.shows.map(s => s.id).sort(), [10, 20]);
+});
+
+test("an online profile's background check goes through the Watchlog server with its session", async () => {
+  const shows = { 10: show(10, next('2026-11-15')) };
+  const app = createApp({
+    native: true,
+    server: (method, path) => {
+      const match = path.match(/^\/v1\/tmdb\/tv\/(\d+)$/);
+      return match && shows[match[1]] ? { body: shows[match[1]] } : { status: 404, body: { error: 'not_found', message: 'x' } };
+    },
+  });
+  const id = app.run('getActiveProfileId()');
+  app.run(`updateProfile('${id}', { tmdbApiKey: null })`);
+  app.run(`linkProfileToAccount('${id}', { account: { id: 'acc-1', displayName: 'Ana' }, session: { id: 's-1' }, token: 'session-token' })`);
+  await trackShows(app, [10]);
+  await app.call('refreshEpisodeNotifications', { now: NOW });
+  const config = app.background.last();
+  assert.equal(config.enabled, true);
+  assert.equal(config.apiKey, 'session-token');
+  assert.equal(config.tmdbBaseUrl, 'https://watchlog.duartecruzcoelho.workers.dev/v1/tmdb');
+  assert.ok(app.serverRequests.some(r => r.path === '/v1/tmdb/tv/10' && r.headers.Authorization === 'Bearer session-token'), "the app's own TMDB requests use the proxy too");
 });
 
 test('the background check is switched off when notifications are off, refused, or no profile is active', async () => {
@@ -180,7 +202,7 @@ test('the background check is switched off when notifications are off, refused, 
 
   app.run('setEpisodeNotificationsEnabled(false)');
   await app.call('refreshEpisodeNotifications', { now: NOW });
-  assert.deepEqual(app.background.last(), { enabled: false, apiKey: '', notifyHour: 18, smallIcon: 'ic_stat_tvtc', shows: [] });
+  assert.deepEqual(app.background.last(), { enabled: false, apiKey: '', tmdbBaseUrl: '', notifyHour: 18, smallIcon: 'ic_stat_tvtc', shows: [] });
 
   app.run('setEpisodeNotificationsEnabled(true)');
   app.notifications.state.permission = 'denied';

@@ -103,6 +103,8 @@ const TT_ICON_PATHS = {
   eyeoff: ['M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M4 4l16 16'],
   mail: ['M3.5 6h17v12h-17z', 'M3.5 7l8.5 6.5L20.5 7'],
   lock: ['M5.5 11h13v9.5h-13z', 'M8.5 11V8a3.5 3.5 0 0 1 7 0v3'],
+  // Not in the design system's set; drawn in its style for "Copy" (two overlapping sheets).
+  copy: ['M9 9h11v11H9z', 'M15 9V4H4v11h5'],
   calendar: ['M4 6.5h16v14H4z', 'M4 10.5h16', 'M8 3.5v4', 'M16 3.5v4'],
 };
 
