@@ -10,6 +10,9 @@ import { fileURLToPath } from 'node:url';
 
 export const MIGRATIONS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'migrations');
 
+// The newest migration file, which a fully migrated database reports as applied last.
+export const LATEST_MIGRATION = fs.readdirSync(MIGRATIONS_DIR).filter(f => f.endsWith('.sql')).sort().pop();
+
 class Statement {
   constructor(sqlite, sql, params = []) {
     this.sqlite = sqlite;

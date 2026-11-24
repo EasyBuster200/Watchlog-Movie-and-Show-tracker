@@ -200,13 +200,52 @@ friends). It's plain JavaScript with no dependencies, in `server/`:
 - **`server/src/api.js`**: the API lives under **`/v1/`**, not `/api/`, because the app's own
   `localApi.js` answers every `/api/...` request on the device. Responses are JSON; errors are
   `{ error, message }` and never include internals (those go to the Worker's logs, in the
-  dashboard under the Worker's **Observability** tab). For now there's one route,
-  `GET /v1/health`, which says whether the database answers and which migration it's on, e.g.
+  dashboard under the Worker's **Observability** tab). Routes live in `server/src/routes/` and
+  register with `router.js`'s `route()`; a handler can throw an `ApiError` for an expected
+  failure. `GET /v1/health` says whether the database answers and which migration it's on, e.g.
   https://watchlog.duartecruzcoelho.workers.dev/v1/health.
 - **CORS:** pages on the site's own address (including previews) can call the API; other origins
   only if listed in `ALLOWED_ORIGINS` (`wrangler.jsonc`), currently the Android app's
-  `https://localhost`. CORS isn't authentication; that comes with accounts.
+  `https://localhost`. CORS isn't authentication: signed-in requests carry a session token.
 - The web app's service worker never caches `/v1/` responses.
+
+#### Accounts API
+
+Online accounts (roadmap Phase 3) sign in with an **account key**, not a password
+(`server/src/auth.js`):
+
+- **Account key:** 27 random characters of Crockford base32 plus a check character, shown as
+  7 groups of 4. Reading it accepts lower case, spaces, dashes and the look-alikes O/0 and I/L/1;
+  the check character rejects a mistyped or swapped character before any lookup. The server
+  stores only a SHA-256 hash: the key is long and random, so a fast hash is safe and fits the
+  free plan's 10 ms CPU limit.
+- **Session token:** returned when a device signs in, sent as `Authorization: Bearer <token>`,
+  stored hashed. Expires after 180 days unused; use renews it (written at most hourly).
+- **Pairing code:** `XXXX-XXXX`, made on a signed-in device, single use, valid 10 minutes.
+  Making a new one cancels the previous one.
+
+| Request | Signed in | Does |
+|---|---|---|
+| `POST /v1/accounts` `{ displayName, deviceName }` | no | Creates an account; returns `{ account, session, token, accountKey }` (the only time the key is sent) |
+| `POST /v1/sessions` `{ accountKey, deviceName }` | no | Signs a device in with the key |
+| `POST /v1/sessions/pair` `{ code, deviceName }` | no | Signs a device in with a pairing code |
+| `GET /v1/account` | yes | `{ account, session }` |
+| `PATCH /v1/account` `{ displayName }` | yes | Renames the account |
+| `DELETE /v1/account` | yes | Deletes the account and all its sessions and codes |
+| `POST /v1/account/key` | yes | Makes a new key (the old one stops working; devices stay signed in) |
+| `POST /v1/pairing-codes` | yes | `{ code, expiresAt }` for adding a device |
+| `GET /v1/sessions` | yes | The account's devices, `current` marking this one |
+| `DELETE /v1/sessions/:id` | yes | Signs one of the account's devices out |
+| `DELETE /v1/session` | yes | Signs this device out |
+
+Errors a client should expect: `400` (`name_required`, `invalid_key_format`,
+`invalid_code_format`, `invalid_json`), `401` (`signed_out`, `wrong_key`, `wrong_code`), `404`,
+and `429 too_many_requests` with a `Retry-After` header. Sign-up is open for now, so creating
+accounts is limited per address (5 an hour) and overall (100 a day); signing in with a key or code
+is limited per address (10 per 15 minutes), and making keys and codes per account
+(`LIMITS` in `routes/accounts.js`). Rate-limit counters store a hash of the address, never the
+address. The weekly job (`cleanup.js`) deletes expired sessions and codes and old counters
+before the backup.
 
 #### Server database
 
