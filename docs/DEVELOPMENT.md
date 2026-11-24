@@ -268,8 +268,9 @@ owner's token. Offline profiles still call TMDB directly with their own token.
   counters: two small writes per request.
 - `TMDB_PROXY` (a `wrangler.jsonc` var, `"on"`) set to `"off"` pauses it (`503 tmdb_paused`).
 - Answers go into Cloudflare's edge cache for a while (a day for configuration and genres, 6 hours
-  for a title's details, 10 minutes for searches, 30 minutes otherwise) where that works; the docs
-  don't promise the Cache API on `workers.dev`.
+  for a title's details, 10 minutes for searches, 30 minutes otherwise). Cloudflare's docs don't
+  promise the Cache API on `workers.dev`, but it works there (checked: a repeated request comes
+  back with `X-Watchlog-Cache: hit`). The cache is per data centre.
 - Sign-up is open for now, so anyone who finds the API could make an account and use the proxy
   within those limits. Decided with the user: switch to invite-only before online accounts are
   shown to everyone.

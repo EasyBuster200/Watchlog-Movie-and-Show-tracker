@@ -9,8 +9,9 @@
 //   two small writes per request. Sign-up is open for now; it must become invite-only before
 //   online accounts are shown to everyone (decided with the user).
 // - TMDB_PROXY = "off" (a wrangler.jsonc var) pauses it without a code change.
-// - Responses are kept in Cloudflare's edge cache for a while where that's available (the docs
-//   don't promise it on workers.dev; without it, every request goes to TMDB).
+// - Responses are kept in Cloudflare's edge cache for a while (per data centre). The docs don't
+//   promise the Cache API on workers.dev, but it works there (seen: `X-Watchlog-Cache: hit`);
+//   without it, every request would simply go to TMDB.
 // - The response body is passed through untouched (no parsing: cheap on the 10 ms CPU limit);
 //   the app strips adult titles itself, as it does for direct calls.
 
