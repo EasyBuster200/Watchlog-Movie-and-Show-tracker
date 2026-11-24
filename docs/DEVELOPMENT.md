@@ -8,7 +8,8 @@ reference (data flow, storage shape, the conventions shared between pages), see
 ## How it works
 
 Watchlog is a plain HTML/CSS/JavaScript app (`public/`) wrapped in an Android app with
-[Capacitor](https://capacitorjs.com/) 6. There's no server, no bundler and no build step for the
+[Capacitor](https://capacitorjs.com/) 6, and also published as an installable web app (see
+[The web app](#the-web-app-iphone-and-browsers)). There's no server, no bundler and no build step for the
 web code: pages load their scripts with ordinary `<script>` tags.
 
 - **No backend.** `public/scripts/localApi.js` patches `window.fetch` and answers the app's own
@@ -103,9 +104,63 @@ The app is a static site until Capacitor wraps it, so most of it can be develope
 serve `public/` with any static file server (`.claude/launch.json` has an `npx serve public`
 configuration) and open `profile-picker.html` to create a profile. Turn off "clean URLs" if your
 server has them (`serve.json` does this for `npx serve`): pages pass their parameters in the query
-string, and a redirect from `page.html?id=1` to `/page` would drop it. Native-only features (the
-Share sheet for exporting backups, the weekly backup file, notifications, the hardware back
-button) need the real Android build.
+string, and `npx serve`'s redirect from `page.html?id=1` to `/page` drops it. Native-only
+features (the weekly backup file, notifications, the hardware back button) need the real Android
+build.
+
+## The web app (iPhone and browsers)
+
+The same `public/` folder is also published as a website that installs like an app (a PWA), which
+is how Watchlog runs on an iPhone without the App Store: open the site in Safari, then Share →
+**Add to Home Screen**. The pieces:
+
+- **`manifest.webmanifest`** names the app and its icons (`images/icon-*.png`, plus
+  `images/apple-touch-icon.png` for iPhone and `images/icon.svg` as the browser tab icon). Every
+  page links it and carries the iPhone meta tags. The PNGs are rendered from
+  `docs/icons/watchlog-launcher.svg`: the "any" icons with its rounded corners, the maskable and
+  iPhone ones as a full square (the phone rounds them itself).
+- **`sw.js`**, the service worker, makes the app open offline. It's network first: online, every
+  file comes fresh from the server, so a deploy shows up on the next load; offline (or after 4 s
+  with no answer) it uses the cached copy. Its `PRECACHE` list must name every file in `public/`;
+  `tests/pwa.test.js` fails when it doesn't, so add new pages and scripts there.
+- **`scripts/pwa.js`** registers the service worker and asks the browser to keep the site's
+  storage (`navigator.storage.persist()`). It does nothing in the Android app.
+- **`theme.js`** sets the `theme-color` tag from the theme, which colours the browser bar and the
+  installed app's status bar. Layout CSS pads with `env(safe-area-inset-*)` for the notch and the
+  home indicator.
+- **Backups:** the web app has no automatic backup. Settings > Export data opens the share sheet
+  on phones ("Save to Files" on iPhone) or downloads the file on a computer, and `backup.js`
+  records when each profile last exported. The Profile page shows a reminder when there's never
+  been an export or the last one is 7+ days old.
+- **Version:** `tools/write-web-version.js` writes `public/version.json` (`2.<commit count>`, the
+  same numbering as the APK) during the deploy, and Settings shows it. It's not committed;
+  without it Settings says "web preview".
+- **Notifications** aren't available on the web yet (see the roadmap).
+
+### Hosting on Cloudflare Pages
+
+The site is hosted for free on [Cloudflare Pages](https://pages.cloudflare.com/), deployed from
+GitHub. One-time setup in the Cloudflare dashboard: **Workers & Pages → Create → Pages → Connect
+to Git**, pick this repository, then:
+
+| Setting | Value |
+|---|---|
+| Production branch | `main` |
+| Framework preset | None |
+| Build command | `node tools/write-web-version.js` |
+| Build output directory | `public` |
+
+Every push to `main` then deploys the site, and every other branch gets its own preview address
+(shown on its pull request), which can be opened on a phone to try a change before merging.
+
+Cloudflare Pages serves `page.html` at `/page` and redirects to it. The service worker caches
+pages without the `.html`, so both addresses work offline.
+
+### Testing on iPhone without a Mac
+
+Safari's developer tools on an iPhone need a Mac. Instead: Playwright's WebKit browser (the same
+engine as Safari) runs on Windows, and most layout and storage problems show up there; anything
+else, try on the phone with a branch's preview deploy.
 
 ## Tests
 
@@ -118,7 +173,8 @@ loads the app's real data-layer scripts into a sandbox that stands in for one pa
 IndexedDB (`fake-indexeddb`), `localStorage`, a fake TMDB server, and fakes of the Capacitor
 plugins. The tests then call the same `/api/...` routes the pages use. They cover watch
 tracking, show statuses, the schedule, stats, recommendations, caching and retries, backups and
-auto-backups, notification scheduling and the background-check sync, and TMDB key validation.
+auto-backups, notification scheduling and the background-check sync, TMDB key validation, and
+the web app's offline file list, manifest and backup reminder.
 Page and UI code isn't covered by tests; check it in a browser.
 
 GitHub Actions (`.github/workflows/tests.yml`) runs the same `npm test` on Node 18 for every pull
@@ -160,7 +216,7 @@ Users then download the new APK and install it over the old one; their data is k
 ## Project structure
 
 ```
-public/            the whole app, loaded into Capacitor's WebView
+public/            the whole app: loaded into Capacitor's WebView, and published as the web app
   *.html           one page per screen (main, movies, shows, detail, episodes, person,
                    airing-soon, stats, lists, bookmarks (the Watchlist), media-list (every
                    "See all"), search, profile, settings, licences, profile-picker)
@@ -168,13 +224,16 @@ public/            the whole app, loaded into Capacitor's WebView
                    profiles.js, standardItem.js (shared item shape), media.js (shared UI
                    components), browse.js (Movies/Shows filter & sort), theme.js (theme and
                    accent, applied before paint), backup.js,
-                   autoBackup.js, notifications.js, one script per page, vendor/ (Capacitor
-                   core and plugins as plain scripts)
+                   autoBackup.js, notifications.js, pwa.js (web app setup), one script per
+                   page, vendor/ (Capacitor core and plugins as plain scripts)
+  sw.js            the web app's service worker (offline)
+  manifest.webmanifest, images/   the web app's name and icons
   styles/          tokens.css (design tokens), style.css (components and screens)
 android/           Capacitor's native Android project. Hand-written parts: MainActivity.java,
                    WatchlogBackgroundPlugin.java, EpisodeCheckWorker.java, app/build.gradle
                    (versioning and signing), the launcher and notification icons
 tests/             Node test suite (npm test)
+tools/             write-web-version.js (version.json for the web deploy)
 docs/              this guide, design/ (the design system's tokens.json and reference
                    component CSS), screenshots/, icons/ (Material Symbols reference SVGs and
                    the app icon artwork)

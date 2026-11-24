@@ -428,9 +428,11 @@ a.tt-airing:hover { border-color: var(--border-strong); }
 .menu__divider { height: 1px; margin: 6px 0; background: var(--border-subtle); }
 
 /* ---------- App layout ---------- */
+/* The env(safe-area-inset-*) terms keep content clear of the notch/status bar and the home
+   indicator when the page runs full screen (the installed web app on iPhone; 0 elsewhere). */
 .screen {
   display: flex; flex-direction: column; gap: var(--space-6);
-  padding: 20px 16px calc(92px + env(safe-area-inset-bottom));
+  padding: calc(20px + env(safe-area-inset-top)) 16px calc(92px + env(safe-area-inset-bottom));
 }
 .screen--tight { gap: 20px; }
 .screen--flush { padding-top: 0; padding-left: 0; padding-right: 0; gap: 0; }
@@ -443,7 +445,7 @@ a.tt-airing:hover { border-color: var(--border-strong); }
 .page-header {
   position: sticky; top: 0; z-index: 20;
   display: flex; flex-direction: column; gap: var(--space-3);
-  padding: 16px 16px 12px;
+  padding: calc(16px + env(safe-area-inset-top)) 16px 12px;
   background: var(--bg-surface); border-bottom: 1px solid var(--border-subtle);
 }
 .page-header__row { display: flex; align-items: center; gap: var(--space-3); }
@@ -455,14 +457,14 @@ a.tt-airing:hover { border-color: var(--border-strong); }
 
 /* ---------- Detail (movie/show) and person ---------- */
 .detail-hero {
-  position: relative; height: 220px; flex-shrink: 0;
+  position: relative; height: calc(220px + env(safe-area-inset-top)); flex-shrink: 0;
   background: var(--bg-raised) center top / cover no-repeat;
 }
 .detail-hero::after {
   content: ''; position: absolute; inset: 0;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.12) 0%, transparent 45%, var(--bg-page) 100%);
 }
-.detail-hero .tt-back { position: absolute; top: 16px; left: 16px; z-index: 1; }
+.detail-hero .tt-back { position: absolute; top: calc(16px + env(safe-area-inset-top)); left: 16px; z-index: 1; }
 .detail-head {
   position: relative; z-index: 1;
   display: flex; align-items: flex-end; gap: 14px;
@@ -611,7 +613,8 @@ a.tt-airing:hover { border-color: var(--border-strong); }
 
 /* ---------- Profile picker ---------- */
 .picker {
-  min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px;
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  padding: calc(24px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom));
 }
 .picker__card {
   width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 20px;

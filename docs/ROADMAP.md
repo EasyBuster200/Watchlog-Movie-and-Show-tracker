@@ -1,6 +1,6 @@
 # Watchlog plan: web app, accounts, sync, friends, admin
 
-Status: **draft, nothing built yet.** This file collects what has been decided so far and the order to build it in. Update it as decisions change.
+Status: **Phase 1 (web app) built; it goes live once Cloudflare Pages is connected. Later phases not started.** This file collects what has been decided so far and the order to build it in. Update it as decisions change.
 
 ## Goals
 
@@ -58,6 +58,8 @@ Status: **draft, nothing built yet.** This file collects what has been decided s
 ---
 
 ## Phase 1: Watchlog as a web app (PWA)
+
+**Built.** What was done and how is in `docs/DEVELOPMENT.md` ("The web app"). Left to do: connect Cloudflare Pages (one-time, in the dashboard) and try it on an iPhone. The backup reminder (7+ days since the last export) was brought forward from Phase 4, because the web app has no automatic backup.
 
 Do this first: it works with today's local profiles and needs no backend.
 
