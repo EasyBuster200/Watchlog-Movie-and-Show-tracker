@@ -1,6 +1,6 @@
 # Watchlog
 
-**A free, private movie and TV show tracker for Android.** Keep track of every movie you've
+**A free, private movie and TV show tracker for Android and iPhone.** Keep track of every movie you've
 watched and every episode of every show, see what's airing next, and get a notification when a
 new episode comes out. No account, no ads, no subscription.
 
@@ -9,8 +9,8 @@ shows, so I built my own replacement. Watchlog started as a personal project (an
 and I'm sharing it in case it's useful to anyone else who misses TV Time. It's built around three
 ideas:
 
-- **Your data stays on your phone.** There's no sign-up and no server. Your watch history is
-  stored only on your device, and nobody else ever sees it.
+- **Your data stays on your phone.** There's no sign-up, and no server that keeps your data. Your
+  watch history is stored only on your device, and nobody else ever sees it.
 - **Free forever.** There's nothing to host or pay for. Movie and show information comes from
   [TMDB](https://www.themoviedb.org/) (The Movie Database), using a free personal key that each
   person gets for themselves (it takes a few minutes, see [step 1](#1-get-your-free-tmdb-key)).
@@ -28,6 +28,8 @@ ideas:
 <p align="center">
   <a href="https://github.com/EasyBuster200/Watchlog-Movie-and-Show-tracker/releases/latest/download/Watchlog.apk"><b>⬇ Download the latest Watchlog.apk</b></a>
   · <a href="https://github.com/EasyBuster200/Watchlog-Movie-and-Show-tracker/releases">All versions</a>
+  <br>
+  <a href="https://watchlog.duartecruzcoelho.workers.dev"><b>📱 Open the web app (iPhone)</b></a>
 </p>
 
 ---
@@ -59,7 +61,7 @@ ideas:
   progress and the next episode to watch.
 - **Airing Soon, with a calendar.** Every announced upcoming episode of the shows you follow,
   day by day, with a strip of upcoming days on top so you can see what's coming at a glance.
-- **Notifications.** A notification at 6 pm on the day a new episode of one of your shows comes
+- **Notifications** (Android app). A notification at 6 pm on the day a new episode of one of your shows comes
   out (it works even if you don't open the app for a while), a reminder when a movie on your
   Watchlist is released in your country, and an optional weekly recap every Sunday evening.
 - **Knows when you've moved on.** Shows you're caught up on wait quietly until new episodes come
@@ -77,12 +79,18 @@ ideas:
   your own language.
 - **Several people on one phone.** Each person gets their own profile with completely separate
   data and settings.
-- **Automatic weekly backups.** Every week your data is saved to a file on your phone, ready to
-  restore if you ever reinstall or switch phones.
+- **Backups.** In the Android app, every week your data is saved to a file on your phone, ready
+  to restore if you ever reinstall or switch phones. On iPhone you export a backup yourself, and
+  Watchlog reminds you when it's been a while.
 
 ## Install it
 
-Watchlog is an **Android** app (Android 5.1 or newer). There's no iPhone version.
+Watchlog comes two ways, and they're the same app:
+
+- an **Android app** (Android 5.1 or newer), and
+- a **web app** for **iPhone** (or any other phone or computer) that you add to your Home Screen,
+  so it opens like any other app. It doesn't need the App Store. It doesn't have notifications
+  or automatic backups yet.
 
 Setting it up takes three steps: get a free TMDB key (about 5 minutes, once), install the app,
 and create your profile.
@@ -115,6 +123,8 @@ need it when you create your profile, and it's stored only on your phone.
 
 ### 2. Install the app
 
+#### On Android
+
 1. **On your Android phone**, open this page and tap
    **[Download the latest Watchlog.apk](https://github.com/EasyBuster200/Watchlog-Movie-and-Show-tracker/releases/latest/download/Watchlog.apk)**.
    (Your browser may warn that the file could be harmful. That's a standard warning for any app
@@ -131,6 +141,20 @@ need it when you create your profile, and it's stored only on your phone.
 
 When it's done, Watchlog appears in your app list.
 
+#### On iPhone
+
+1. Open **[watchlog.duartecruzcoelho.workers.dev](https://watchlog.duartecruzcoelho.workers.dev)** in **Safari**. (It has to be Safari: other
+   browsers on iPhone can't add apps to the Home Screen properly.)
+2. Tap the **Share** button (the square with an arrow), scroll down and tap **Add to Home
+   Screen**, then **Add**.
+3. Open Watchlog **from the new icon** on your Home Screen. It opens full screen, like any app,
+   and works offline too.
+
+> **Always open it from the icon.** The Home Screen app keeps its data separately from Safari,
+> so what you track in a Safari tab doesn't show up in the app, and the other way round.
+> **Deleting the icon deletes Watchlog's data**, so keep a backup (see
+> [Backups](#backups-and-moving-to-a-new-phone)).
+
 ### 3. Create your profile
 
 1. Open **Watchlog** and tap **+ New profile**.
@@ -138,7 +162,7 @@ When it's done, Watchlog appears in your app list.
 3. Tap **Create profile**. Watchlog checks the token with TMDB first, and tells you if something
    is wrong (for example if you pasted the short "API Key" by mistake).
 4. Tap your new profile to start.
-5. The first time, Android asks whether Watchlog may send you notifications. Tap **Allow** if
+5. In the Android app, the first time, Android asks whether Watchlog may send you notifications. Tap **Allow** if
    you want them (you can turn each kind on or off later in [Settings](#settings)).
 
 ## How to use it
@@ -186,8 +210,8 @@ aired yet can't be marked.
 - **Airing Soon** (on **Home**) shows the next episodes of the shows you follow. Tap **See all**
   for the full schedule: a strip of upcoming days on top (days with new episodes show how many;
   tap one to jump to it) and every announced episode listed below.
-- **Notifications:** on the day a new episode airs, you get a notification at 6 pm. Tap it to
-  open the show. Turn them on or off in [Settings](#settings).
+- **Notifications** (Android app): on the day a new episode airs, you get a notification at 6 pm.
+  Tap it to open the show. Turn them on or off in [Settings](#settings).
 
 How Watchlog sorts your shows:
 
@@ -221,7 +245,8 @@ A–Z or rating). Your watched shows' full list shows how far along you are in e
 its status (Watching, Caught up, Completed, Dropped), and can be filtered by status. Tap **See
 all** next to *Stats* for the full stats page: hours watched each month, and your top genres and
 actors. The line under your name
-shows when your data was last backed up.
+shows when your data was last backed up (on iPhone, when you last exported a backup, with a
+reminder once it's over a week ago).
 
 The **⋯** button on your profile opens [Settings](#settings).
 
@@ -233,7 +258,7 @@ your profile only, so each person on the phone can set it up their own way.
 - **Your name and TMDB token:** tap the card at the top to change them.
 - **Appearance:** *Dark*, *Light* or *Match device* (follows your phone's setting), and seven
   accent colours.
-- **Notifications:**
+- **Notifications** (Android app only for now):
   - **New episodes:** 6 pm on the day a new episode of a show you follow airs.
   - **Release reminders:** 6 pm on the day a movie on your Watchlist is released in your
     country (in cinemas, or to stream or buy if it isn't released in cinemas there).
@@ -244,8 +269,9 @@ your profile only, so each person on the phone can set it up their own way.
     *Automatic* picks it from your phone's language settings.
   - **Language:** the language of titles, descriptions and episode names from TMDB. (Watchlog's
     own menus stay in English.) When TMDB has no translation, you see the English text.
-- **Data & backup:** turn the weekly automatic backup on or off, **Back up now**, **Export
-  data** and **Import data** (see [Backups](#backups-and-moving-to-a-new-phone)).
+- **Data & backup:** turn the weekly automatic backup on or off and **Back up now** (both Android
+  app), **Export data** (on iPhone it also shows when you last did) and **Import data** (see
+  [Backups](#backups-and-moving-to-a-new-phone)).
 - **Account:**
   - **TMDB token:** change the token this profile uses.
   - **Switch profile:** go back to the profile list.
@@ -263,16 +289,19 @@ whichever profile is currently open.
 
 ## Backups and moving to a new phone
 
-**Your data only exists on your phone.** If you uninstall Watchlog or lose your phone without a
-backup, it's gone, so it's worth knowing how backups work.
+**Your data only exists on your phone.** If you uninstall Watchlog (on iPhone: delete its icon)
+or lose your phone without a backup, it's gone, so it's worth knowing how backups work.
 
-- **Automatic weekly backup:** once a week, Watchlog saves a backup of each profile to the
+- **Automatic weekly backup** (Android app): once a week, Watchlog saves a backup of each profile to the
   **Documents → Watchlog** folder on your phone (you can see it in your Files app). Only the
   newest one is kept. The weekly backup happens the next time you open the app after it's due;
   **Settings → Back up now** makes one immediately. You can turn it off in Settings.
 - **Manual backup:** **Settings → Export data** lets you send a copy anywhere: Google Drive,
   email, another phone, and so on. It's a good idea to keep a copy somewhere other than your
   phone.
+- **On iPhone** there's no automatic backup, so export one regularly: **Settings → Export data**,
+  then **Save to Files** (choose **iCloud Drive** to keep it off the phone). The **Profile** tab
+  reminds you when your last backup is more than a week old.
 - **Backups never contain your TMDB token,** so they're safe to keep in the cloud. When you
   restore one, you'll be asked for your token again.
 
@@ -283,17 +312,23 @@ backup, it's gone, so it's worth knowing how backups work.
 2. Open Watchlog. On the profile screen, tap **Import backup** and choose the file.
 3. Paste your TMDB **API Read Access Token** and tap **Restore backup**.
 
+**Moving from Android to iPhone** (or back) works the same way: export a backup in one app, get
+the file onto the other phone (Drive, email, iCloud Drive...), and restore it there.
+
 Restoring always creates a new profile. It never overwrites one you already have. (If you
 already have a profile, **Settings → Import data** restores a backup as another profile using
 the same token.)
 
-> **After reinstalling,** Android doesn't let the new install delete backup files made by the
+> **After reinstalling the Android app,** Android doesn't let the new install delete backup files made by the
 > old one, so old files can pile up in **Documents → Watchlog**. Delete them yourself from the
 > Files app whenever you like.
 
 ## Updating the app
 
-When there's a new version, download the latest
+**On iPhone (web app)** there's nothing to do: the newest version loads by itself whenever you
+open Watchlog with an internet connection, and your data stays.
+
+**On Android,** when there's a new version, download the latest
 **[Watchlog.apk](https://github.com/EasyBuster200/Watchlog-Movie-and-Show-tracker/releases/latest/download/Watchlog.apk)**
 and install it the same way. It installs over the old version and **keeps all your data**. There's
 no need to uninstall first. (Uninstalling deletes your data, so only do that after making a
@@ -303,7 +338,9 @@ version you have at the bottom of Settings.
 
 ## Privacy
 
-- Watchlog has **no account and no server**. Everything you track is stored only on your phone.
+- Watchlog has **no account and no server that stores your data**. Everything you track is stored
+  only on your phone. (The web app's address only delivers the app itself; your data never goes
+  there.)
 - The only thing it connects to is **TMDB**, to get movie and show information and pictures,
   using your own token. Your watch history is never sent anywhere.
 - There are **no ads, no analytics and no tracking** of any kind.
@@ -319,6 +356,7 @@ it, not the short "API Key". If Watchlog says it looks like the short API Key, g
 Watchlog needs internet to fetch movie and show information (your own data is always available).
 
 **I'm not getting notifications:**
+- Notifications are only in the Android app for now; the iPhone web app doesn't have them yet.
 - Check they're on in **Settings → Notifications**.
 - Check Android allows them: **Settings → Apps → Watchlog → Notifications** (your phone's
   settings, not Watchlog's).
@@ -331,6 +369,11 @@ Watchlog needs internet to fetch movie and show information (your own data is al
 
 **Titles are in the wrong language**: set **Settings → Language**. Titles you saved before
 changing it keep the language they were saved in.
+
+**On iPhone, my library is empty or different**: you may have opened Watchlog in a Safari tab
+instead of from the Home Screen icon. They keep separate data; always use the icon. If you
+deleted the icon, its data was deleted too: add it to the Home Screen again and restore your
+latest backup.
 
 **The app won't install over my current version**: this happens if the APK wasn't from this
 page (it was signed differently). Make a backup, uninstall, install the version from here, and

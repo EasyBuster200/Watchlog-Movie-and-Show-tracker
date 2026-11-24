@@ -1,6 +1,6 @@
 # Watchlog plan: web app, accounts, sync, friends, admin
 
-Status: **Phase 1 (web app) built; it goes live once the repository is connected to Cloudflare. Later phases not started.** This file collects what has been decided so far and the order to build it in. Update it as decisions change.
+Status: **Phase 1 (web app) is done and live at https://watchlog.duartecruzcoelho.workers.dev. Later phases not started.** This file collects what has been decided so far and the order to build it in. Update it as decisions change.
 
 ## Goals
 
@@ -14,7 +14,7 @@ Status: **Phase 1 (web app) built; it goes live once the repository is connected
 
 | Topic | Decision |
 |---|---|
-| Hosting | Everything on **Cloudflare**: Pages for the app files, Workers for the API, D1 (SQLite) for the database, Worker secrets for keys. One account, one platform. |
+| Hosting | Everything on **Cloudflare**: one Worker (`watchlog`, `wrangler.jsonc`) serves the app files now and will also run the API, D1 (SQLite) for the database, Worker secrets for keys. One account, one platform. |
 | Sign-in | **Passkeys** (Face ID, fingerprint, screen lock). No passwords. |
 | Architecture | **Local-first stays.** IndexedDB on the device is what the app reads and writes. The server is a sync partner and backup, never something a screen waits on. |
 | Offline-only use | Still supported: a **local account** works like today's profiles, with no server and the person's own TMDB token. |
@@ -59,11 +59,11 @@ Status: **Phase 1 (web app) built; it goes live once the repository is connected
 
 ## Phase 1: Watchlog as a web app (PWA)
 
-**Built.** What was done and how is in `docs/DEVELOPMENT.md` ("The web app"). Hosted as a static-assets Cloudflare Worker (`wrangler.jsonc`) rather than Cloudflare Pages: Cloudflare now steers new projects to Workers, and the Phase 2 API joins the same Worker. Left to do: connect the repository in the Cloudflare dashboard (one-time) and try it on an iPhone. The backup reminder (7+ days since the last export) was brought forward from Phase 4, because the web app has no automatic backup.
+**Done, live at https://watchlog.duartecruzcoelho.workers.dev.** What was built and how is in `docs/DEVELOPMENT.md` ("The web app"). Hosted as a static-assets Cloudflare Worker (`wrangler.jsonc`) rather than Cloudflare Pages: Cloudflare now steers new projects to Workers, and the Phase 2 API joins the same Worker. Checked on the live site: every file is served, the service worker caches the whole app, and the `page.html` → `/page` redirect keeps the query string. Still to check on a real iPhone: status bar, safe areas, the share sheet. The backup reminder (7+ days since the last export) was brought forward from Phase 4, because the web app has no automatic backup.
 
 Do this first: it works with today's local profiles and needs no backend.
 
-1. **Host `public/` on Cloudflare Pages.** Connect the GitHub repo and deploy on every push. Pages gives a free `*.pages.dev` address with HTTPS.
+1. **Host `public/` on Cloudflare** (done as a static-assets Worker). Connect the GitHub repo and deploy on every push, with a free `*.workers.dev` address with HTTPS.
 2. **Check it in Safari as it is.** Profiles, browsing, tracking, stats and restore should mostly work already, because `localApi.js` doesn't need a server.
 3. **Make it installable:**
    - a web app manifest (name, icons, `display: standalone`, theme colour)
@@ -81,11 +81,11 @@ Do this first: it works with today's local profiles and needs no backend.
 
 ## Phase 2: Backend foundation
 
-1. A **Cloudflare Worker** project (e.g. `server/` in this repo), deployed with Wrangler, on its own subdomain or under `/api` on the same domain.
+1. Give the existing **`watchlog` Worker** (`wrangler.jsonc`, which only serves `public/` today) a script for `/api/*`, e.g. in `server/`. Same domain as the app, so no separate subdomain.
 2. A **D1 database** with migrations checked into the repo.
 3. **Secrets** (TMDB token, Web Push VAPID keys, session signing key) stored as Worker secrets, never in the repo, the app or the APK.
 4. **Two environments**, `dev` and `prod`, so testing never touches real users' data.
-5. **CORS:** allow only the app's own origins: the Pages domain and Capacitor's Android origin, `https://localhost`.
+5. **CORS:** allow only the app's own origins: the app's domain and Capacitor's Android origin, `https://localhost`.
 6. **Weekly database export** to R2 (free tier) as an extra backup beyond D1's built-in restore window.
 
 ## Phase 3: Accounts
@@ -100,7 +100,7 @@ The profile picker offers both. A local account can later be **upgraded** to an 
 ### Passkeys
 
 - WebAuthn, with **SimpleWebAuthn** on the Worker (it runs on Workers).
-- The relying party ID is the app's domain (the Pages domain or a custom one). **Decide the domain before launch:** passkeys are tied to it, so changing it later means everyone re-registers.
+- The relying party ID is the app's domain (the `workers.dev` address or a custom one). **Decide the domain before launch:** passkeys are tied to it, so changing it later means everyone re-registers.
 - **Multiple passkeys per account.** Passkeys sync within Apple's or Google's ecosystem, but not between them. Adding a second device:
   - sign in on the new device by scanning a QR code with a device that already has a passkey (the standard cross-device sign-in), then
   - offer to create a passkey on the new device.
@@ -284,7 +284,7 @@ People's watch history and lists are **not** visible on the admin page. It shows
 
 | Item | Expected |
 |---|---|
-| Cloudflare Pages, Workers, D1, R2, Access, Turnstile | €0 at friends-and-family scale |
+| Cloudflare Workers, D1, R2, Access, Turnstile | €0 at friends-and-family scale |
 | TMDB API | €0 (non-commercial) |
 | Apple developer account / Mac | Not needed |
 | Custom domain | Optional, about €10/year. Recommended before launch because passkeys are tied to the domain. |
@@ -292,7 +292,7 @@ People's watch history and lists are **not** visible on the admin page. It shows
 
 ## Build order
 
-1. Phase 1: PWA (no backend)
+1. Phase 1: PWA (no backend). **Done.**
 2. Phase 2: backend foundation
 3. Phase 3: accounts (passkeys, invites, local vs online, upgrade a local account)
 4. Phase 5: TMDB proxy (so online accounts need no token); can be built alongside Phase 3

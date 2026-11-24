@@ -133,8 +133,8 @@ is how Watchlog runs on an iPhone without the App Store: open the site in Safari
   records when each profile last exported. The Profile page shows a reminder when there's never
   been an export or the last one is 7+ days old.
 - **Version:** `tools/write-web-version.js` writes `public/version.json` (`2.<commit count>`, the
-  same numbering as the APK) during the deploy, and Settings shows it. It's not committed;
-  without it Settings says "web preview".
+  same numbering as the APK, plus the commit id from git) during the deploy, and Settings shows
+  it. It's not committed; without it Settings says "web preview".
 - **Notifications** aren't available on the web yet (see the roadmap).
 
 ### Hosting on Cloudflare
@@ -152,11 +152,15 @@ pick this repository, then:
 | Project name | `watchlog` (must match `name` in `wrangler.jsonc`) |
 | Build command | `node tools/write-web-version.js` |
 | Deploy command | `npx wrangler deploy` |
+| Preview command | `npx wrangler preview` |
 | Preview builds | On |
 
-Every push to `main` then deploys the site at `https://watchlog.<your-subdomain>.workers.dev`,
-and every other branch gets its own preview address (shown on its pull request), which can be
-opened on a phone to try a change before merging. Wrangler isn't a dependency of this
+Every push to `main` then deploys the site, live at **https://watchlog.duartecruzcoelho.workers.dev**,
+and every other branch gets its own preview address, `https://<branch>-watchlog.<subdomain>.workers.dev`
+(the pull request's "Workers Builds" check links to the build, whose **Visit** button opens it),
+which can be opened on a phone to try a change before merging. `wrangler preview` refuses to run
+without the `"previews": {}` block in `wrangler.jsonc`, so keep it. A preview's version number
+counts the branch's own commits, so it can be higher than what `main` gets after a squash merge. Wrangler isn't a dependency of this
 repository: Cloudflare's build runs it with `npx` (it needs a newer Node than the Node 18 the
 project supports).
 
