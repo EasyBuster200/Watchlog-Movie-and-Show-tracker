@@ -62,11 +62,28 @@ function formatBackupDate(iso) {
   return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+// The web app (iPhone) has no automatic backup, and the browser's storage is the only copy of
+// the library, so remind people to export one every BACKUP_REMINDER_AFTER_DAYS (backup.js).
+function renderWebBackupReminder(user) {
+  const days = daysSinceBackupExport(user.id);
+  const where = 'Export one in Settings > Export data.';
+  if (days === null) {
+    showBackupStatus('No backup yet', `Your library is only stored in this browser. ${where}`, { warning: true });
+  } else if (days >= BACKUP_REMINDER_AFTER_DAYS) {
+    showBackupStatus(`Last backup ${days} days ago`, `Time for a new one. ${where}`, { warning: true });
+  } else {
+    showBackupStatus(`Backed up ${formatBackupDate(getLastBackupExport(user.id))}`, 'Exported from this browser');
+  }
+}
+
 // The weekly auto-backup (autoBackup.js, Android only): when it last ran and where the file
 // is, or anything that needs attention (a failed write, an older file it couldn't delete, or
 // auto-backup being switched off in Settings).
 function renderAutoBackupStatus(user) {
-  if (!isNativeApp()) return;
+  if (!isNativeApp()) {
+    renderWebBackupReminder(user);
+    return;
+  }
   const info = getAutoBackupInfo(user.id);
   if (!getProfilePrefs(user).autoBackup) {
     showBackupStatus('Auto-backup is off', info && info.savedAt ? `Last saved ${formatBackupDate(info.savedAt)}. Turn it on in Settings.` : 'Turn it on in Settings.', { warning: true });

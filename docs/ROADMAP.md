@@ -1,6 +1,6 @@
 # Watchlog plan: web app, accounts, sync, friends, admin
 
-Status: **draft, nothing built yet.** This file collects what has been decided so far and the order to build it in. Update it as decisions change.
+Status: **Phase 1 (web app) built; it goes live once the repository is connected to Cloudflare. Later phases not started.** This file collects what has been decided so far and the order to build it in. Update it as decisions change.
 
 ## Goals
 
@@ -58,6 +58,8 @@ Status: **draft, nothing built yet.** This file collects what has been decided s
 ---
 
 ## Phase 1: Watchlog as a web app (PWA)
+
+**Built.** What was done and how is in `docs/DEVELOPMENT.md` ("The web app"). Hosted as a static-assets Cloudflare Worker (`wrangler.jsonc`) rather than Cloudflare Pages: Cloudflare now steers new projects to Workers, and the Phase 2 API joins the same Worker. Left to do: connect the repository in the Cloudflare dashboard (one-time) and try it on an iPhone. The backup reminder (7+ days since the last export) was brought forward from Phase 4, because the web app has no automatic backup.
 
 Do this first: it works with today's local profiles and needs no backend.
 
@@ -304,7 +306,7 @@ Each step leaves a working app.
 
 ## Open questions
 
-- **Domain:** buy a custom domain, or stay on `*.pages.dev`? Decide before Phase 3 (passkeys are tied to it).
+- **Domain:** buy a custom domain, or stay on `*.workers.dev`? Decide before Phase 3 (passkeys are tied to it).
 - **Android sign-in:** WebView WebAuthn, a Credential Manager plugin, or sign-in via the browser? Decide in Phase 3.
 - **Several profiles on one device:** can each be a different online account (e.g. family members sharing a tablet)? Proposed: yes, one online account per profile.
 - **Android notifications:** keep local notifications permanently, or move to server push later?

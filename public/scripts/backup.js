@@ -79,6 +79,55 @@ async function shareBackupNatively(json, filename) {
   });
 }
 
+// On a phone's browser (the web app on iPhone especially) the system share sheet is the way to
+// keep a file: "Save to Files", iCloud Drive, email... Returns 'shared', 'cancelled', or
+// 'unsupported' (no file sharing, a file type the browser won't share, or the share needs a
+// tap that's no longer fresh) - the caller then downloads instead. Desktop browsers download.
+async function shareBackupOnWeb(json, filename) {
+  const touchDevice = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  if (!touchDevice || !navigator.canShare || typeof File === 'undefined') return 'unsupported';
+  const file = new File([json], filename, { type: 'application/json' });
+  if (!navigator.canShare({ files: [file] })) return 'unsupported';
+  try {
+    await navigator.share({ files: [file], title: 'Watchlog backup' });
+    return 'shared';
+  } catch (error) {
+    return error && error.name === 'AbortError' ? 'cancelled' : 'unsupported';
+  }
+}
+
+// When each profile last exported a backup (localStorage `tvtc_backup_exports`:
+// { [profileId]: ISO date }). The web app has no automatic backup, so Profile and Settings use
+// this to remind people to export one.
+const BACKUP_EXPORTS_KEY = 'tvtc_backup_exports';
+const BACKUP_REMINDER_AFTER_DAYS = 7;
+
+function readBackupExports() {
+  try {
+    return JSON.parse(localStorage.getItem(BACKUP_EXPORTS_KEY)) || {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function getLastBackupExport(profileId) {
+  return readBackupExports()[profileId] || null;
+}
+
+function recordBackupExport(profileId, at = new Date()) {
+  const exports = readBackupExports();
+  exports[profileId] = at.toISOString();
+  localStorage.setItem(BACKUP_EXPORTS_KEY, JSON.stringify(exports));
+}
+
+// Days since the last export (rounded down), or null when there has never been one.
+function daysSinceBackupExport(profileId, now = new Date()) {
+  const last = getLastBackupExport(profileId);
+  if (!last) return null;
+  return Math.max(0, Math.floor((now - new Date(last)) / (24 * 60 * 60 * 1000)));
+}
+
+// Returns false when the person cancelled the share sheet (nothing was saved).
 async function exportBackup(profile) {
   const payload = await buildBackupPayload(profile);
   const json = JSON.stringify(payload, null, 2);
@@ -87,8 +136,12 @@ async function exportBackup(profile) {
   if (isNativeApp()) {
     await shareBackupNatively(json, filename);
   } else {
-    downloadBackupInBrowser(json, filename);
+    const shared = await shareBackupOnWeb(json, filename);
+    if (shared === 'cancelled') return false;
+    if (shared === 'unsupported') downloadBackupInBrowser(json, filename);
   }
+  recordBackupExport(profile.id);
+  return true;
 }
 
 function isValidBackupPayload(payload) {

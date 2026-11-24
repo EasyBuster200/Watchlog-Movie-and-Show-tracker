@@ -309,10 +309,17 @@ async function backUpNow(row) {
   renderSections();
 }
 
+// The web app has no automatic backup, so the row says when this profile last exported one.
+function exportSub() {
+  const last = getLastBackupExport(user.id);
+  if (isNativeApp() || !last) return 'Save your library as a JSON file';
+  return `Last exported ${formatBackupDate(last)}`;
+}
+
 async function exportData(row) {
   row.disabled = true;
   try {
-    await exportBackup(user);
+    if (await exportBackup(user)) renderSections();
   } catch (error) {
     console.error('Backup export failed:', error);
     await confirmDialog({ title: 'Export failed', message: 'Something went wrong creating the backup file.', confirmLabel: 'OK', cancelLabel: 'Close' });
@@ -400,7 +407,7 @@ function renderSections() {
   ]));
 
   const backupNow = settingsRow({ label: 'Back up now', onClick: () => backUpNow(backupNow), disabled: !isNativeApp() });
-  const exportRow = settingsRow({ label: 'Export data', sub: 'Save your library as a JSON file', onClick: () => exportData(exportRow) });
+  const exportRow = settingsRow({ label: 'Export data', sub: exportSub(), onClick: () => exportData(exportRow) });
   container.appendChild(settingsSection('Data & backup', [
     settingsRow({
       label: 'Auto-backup',
@@ -426,12 +433,26 @@ function renderSections() {
   ]));
 }
 
-// The installed version comes from the app's own native plugin; the web preview has none.
+// The web app's version comes from version.json, written when the site is deployed
+// (tools/write-web-version.js). Serving public/ locally has none.
+async function webVersionLabel() {
+  try {
+    const response = await fetch('version.json', { cache: 'no-store' });
+    if (!response.ok) return 'Watchlog · web preview';
+    const info = await response.json();
+    if (info.versionName) return `Watchlog · version ${info.versionName} (web)`;
+    return info.commit ? `Watchlog · web build ${info.commit}` : 'Watchlog · web';
+  } catch (error) {
+    return 'Watchlog · web';
+  }
+}
+
+// The installed version comes from the app's own native plugin.
 async function renderVersion() {
   const versionEl = document.getElementById('app-version');
   const plugin = typeof backgroundPlugin === 'function' ? backgroundPlugin() : null;
   if (!isNativeApp() || !plugin) {
-    versionEl.textContent = 'Watchlog · web preview';
+    versionEl.textContent = await webVersionLabel();
     return;
   }
   try {

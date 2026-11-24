@@ -27,6 +27,10 @@
     Object.keys(ACCENT_TOKENS).forEach(token => {
       root.style.setProperty(token, `var(--${accent}${ACCENT_TOKENS[token]})`);
     });
+    // The browser bar / the installed web app's status bar takes this colour.
+    const themeColor = document.querySelector('meta[name="theme-color"]');
+    const surface = getComputedStyle(root).getPropertyValue('--bg-surface').trim();
+    if (themeColor && surface) themeColor.setAttribute('content', surface);
   }
 
   // Settings calls this after a change; a "Match device" theme also follows the phone live.

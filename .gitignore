@@ -6,3 +6,6 @@ node_modules/
 # Cloudflare Worker (server/, see docs/ROADMAP.md): local secrets and Wrangler's state
 .dev.vars
 .wrangler/
+
+# Written by tools/write-web-version.js when the web app is deployed
+/public/version.json
