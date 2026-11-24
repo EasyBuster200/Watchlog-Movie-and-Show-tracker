@@ -485,6 +485,8 @@ a.tt-airing:hover { border-color: var(--border-strong); }
 .confirm-modal p { font-size: 14px; line-height: 21px; color: var(--text-secondary); }
 .confirm-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
 .confirm-actions .tt-btn { flex: 1; }
+/* Three choices (Settings' keep-or-remove on sign-out): one per line, so long labels fit. */
+.confirm-actions--stacked { flex-direction: column; }
 .dialog-form { display: flex; flex-direction: column; gap: 14px; }
 
 .menu { position: relative; }

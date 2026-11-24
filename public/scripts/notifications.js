@@ -167,10 +167,15 @@ function backgroundPlugin() {
 async function syncBackgroundEpisodeCheck({ enabled, profile = null, shows = [] }) {
   const plugin = backgroundPlugin();
   if (!plugin) return;
+  // Where the native check asks TMDB: directly with an offline profile's own token, or through
+  // the Watchlog server's proxy with an online profile's session (localApi.js's tmdbAccess).
+  // Both are "Authorization: Bearer <apiKey>" against "<tmdbBaseUrl>/tv/<id>".
+  const access = enabled && profile && typeof tmdbAccess === 'function' ? tmdbAccess(profile) : null;
   try {
     await plugin.configure({
-      enabled,
-      apiKey: enabled && profile ? profile.tmdbApiKey : '',
+      enabled: enabled && Boolean(access),
+      apiKey: access ? access.token : '',
+      tmdbBaseUrl: access ? access.base : '',
       notifyHour: EPISODE_NOTIFY_HOUR,
       smallIcon: NOTIFICATION_SMALL_ICON,
       shows: enabled ? shows.map(show => ({ id: show.tmdbId, title: show.title })) : [],

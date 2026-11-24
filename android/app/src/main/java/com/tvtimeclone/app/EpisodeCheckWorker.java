@@ -49,7 +49,7 @@ import java.util.TimeZone;
  */
 public class EpisodeCheckWorker extends Worker {
     private static final String TAG = "WatchlogEpisodeCheck";
-    private static final String TMDB_TV_URL = "https://api.themoviedb.org/3/tv/";
+    private static final String TMDB_API = "https://api.themoviedb.org/3";
     private static final int TIMEOUT_MS = 15000;
 
     public EpisodeCheckWorker(@NonNull Context context, @NonNull WorkerParameters params) {
@@ -67,6 +67,10 @@ public class EpisodeCheckWorker extends Worker {
         Context context = getApplicationContext();
         SharedPreferences prefs = context.getSharedPreferences(WatchlogBackgroundPlugin.PREFS, Context.MODE_PRIVATE);
         String apiKey = prefs.getString("apiKey", "");
+        // Empty = TMDB itself (offline profile); otherwise the Watchlog server's proxy, which takes
+        // the online profile's session token the same way (notifications.js).
+        String baseUrl = prefs.getString("tmdbBaseUrl", "");
+        String tvUrl = (baseUrl.isEmpty() ? TMDB_API : baseUrl) + "/tv/";
         if (!prefs.getBoolean("enabled", false) || apiKey.isEmpty()) return Result.success();
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return Result.success();
 
@@ -85,7 +89,7 @@ public class EpisodeCheckWorker extends Worker {
                 long showId = show.getLong("id");
                 JSONObject details;
                 try {
-                    details = fetchShow(showId, apiKey);
+                    details = fetchShow(tvUrl, showId, apiKey);
                 } catch (Exception e) {
                     hadTransientFailure = true;
                     Log.w(TAG, "Couldn't check show " + showId + ": " + e.getMessage());
@@ -137,8 +141,8 @@ public class EpisodeCheckWorker extends Worker {
     }
 
     /** null for a 404 (show gone); throws on network errors and other failures. */
-    private static JSONObject fetchShow(long showId, String apiKey) throws Exception {
-        HttpURLConnection conn = (HttpURLConnection) new URL(TMDB_TV_URL + showId).openConnection();
+    private static JSONObject fetchShow(String tvUrl, long showId, String apiKey) throws Exception {
+        HttpURLConnection conn = (HttpURLConnection) new URL(tvUrl + showId).openConnection();
         conn.setConnectTimeout(TIMEOUT_MS);
         conn.setReadTimeout(TIMEOUT_MS);
         conn.setRequestProperty("accept", "application/json");

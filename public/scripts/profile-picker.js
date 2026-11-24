@@ -2,16 +2,18 @@
 // time:
 //   home      Who's watching? - the profiles on this device (Edit / Delete), Sign in, Offline
 //             profile, Import backup
-//   offline   New offline profile (display name + TMDB token); also Edit profile, and the last
-//             step of restoring a backup (backups never contain the token - see backup.js)
+//   offline   New offline profile (display name + TMDB token); also Edit profile (an online
+//             profile's token is optional: it uses the server's), the last step of restoring a
+//             backup (backups never contain the token - see backup.js), and adding a token to a
+//             signed-out online profile kept as an offline copy
 //   import    Import a backup: choose the .json file
 //   restore   Ready to restore: what's in the file, then restore it as an offline profile
 //   Online accounts (roadmap Phase 3; calls in serverApi.js):
 //   signin    Sign in with the account key
 //   pair      Sign in with a one-time code from a signed-in device
-//   finish    After signing in on a new device: name and TMDB token for the new profile (online
-//             profiles still use their own TMDB token until roadmap Phase 5)
-//   create    Create an account: name and TMDB token, then save-key
+//   create    Create an account: just a name, then save-key
+//   Online profiles need no TMDB token: they use the server's TMDB proxy, which has the owner's
+//   (localApi.js's tmdbAccess). Only offline profiles bring their own.
 //   save-key  The account key, with Copy / Save as file and a "type the last 4" check. Also
 //             opened from Settings: profile-picker.html?screen=save-key&profile=<id>&next=<page>
 //   recover / inbox
@@ -121,6 +123,22 @@ function profileMeta(profile) {
   return meta;
 }
 
+// A signed-out online profile signs in again; a profile with neither a session nor its own
+// token (an offline copy kept at sign-out) gets a token first. Everything else just opens.
+function openProfileFromList(profile) {
+  if (profile.account && !isSignedIn(profile) && !profile.tmdbApiKey) {
+    setActiveProfileId(profile.id);
+    show('signin');
+    return;
+  }
+  if (!profile.account && !profile.tmdbApiKey) {
+    show('offline', { profile, notice: 'To use this profile offline, add your own TMDB token.' });
+    return;
+  }
+  setActiveProfileId(profile.id);
+  window.location.href = 'main.html';
+}
+
 async function deleteWithConfirm(profile) {
   const ok = await confirmDialog({
     title: `Delete ${profile.displayName}?`,
@@ -147,10 +165,7 @@ function renderHome() {
       const open = el('button', 'auth-profile__open');
       open.type = 'button';
       open.setAttribute('aria-label', `Open ${profile.displayName}`);
-      open.addEventListener('click', () => {
-        setActiveProfileId(profile.id);
-        window.location.href = 'main.html';
-      });
+      open.addEventListener('click', () => openProfileFromList(profile));
       open.appendChild(el('span', 'auth-profile__avatar', initials(profile.displayName)));
       const text = el('span', 'auth-profile__text');
       text.appendChild(el('span', 'auth-profile__name', profile.displayName));
@@ -182,7 +197,9 @@ function renderHome() {
 
 // ---------- New offline profile / Edit / last step of a restore ----------
 
-function renderOfflineForm({ profile = null, restore = null } = {}) {
+function renderOfflineForm({ profile = null, restore = null, notice = null } = {}) {
+  // A signed-in online profile reaches TMDB through the server, so its own token is optional.
+  const tokenOptional = Boolean(profile && isSignedIn(profile));
   authEl.appendChild(backButton(() => show(restore ? 'restore' : 'home')));
   const title = restore ? 'Finish restoring' : profile ? 'Edit profile' : 'New offline profile';
   const text = restore
@@ -190,6 +207,12 @@ function renderOfflineForm({ profile = null, restore = null } = {}) {
     : profile ? 'Change the name or the TMDB token this profile uses.'
       : 'No account, no email. Just a name and your own TMDB token.';
   authEl.appendChild(authHead({ title, text }));
+  if (notice) {
+    const note = el('div', 'auth__note');
+    note.innerHTML = ttIcon('lock', { size: 18 });
+    note.appendChild(el('span', null, notice));
+    authEl.appendChild(note);
+  }
 
   const form = el('form', 'auth__form');
   form.noValidate = true;
@@ -199,8 +222,9 @@ function renderOfflineForm({ profile = null, restore = null } = {}) {
   });
   const tokenField = buildTextField({
     label: 'TMDB API Read Access Token', type: 'password', icon: 'lock', placeholder: 'Paste your token',
-    autocomplete: 'off', helper: 'The long token on themoviedb.org → Settings → API',
-    value: restore ? (legacyBackupApiKey(restore.payload) || '') : profile ? profile.tmdbApiKey : '',
+    autocomplete: 'off',
+    helper: tokenOptional ? 'Optional: this online profile uses Watchlog\'s. Only needed to use it offline.' : 'The long token on themoviedb.org → Settings → API',
+    value: restore ? (legacyBackupApiKey(restore.payload) || '') : profile ? (profile.tmdbApiKey || '') : '',
   });
   tokenField.input.spellcheck = false;
   form.appendChild(nameField);
@@ -226,11 +250,11 @@ function renderOfflineForm({ profile = null, restore = null } = {}) {
     const displayName = nameField.input.value.trim();
     const tmdbApiKey = tokenField.input.value.trim();
     nameField.setError(displayName ? null : 'Enter a name.');
-    tokenField.setError(tmdbApiKey ? null : 'Paste your TMDB token.');
+    tokenField.setError(tmdbApiKey || tokenOptional ? null : 'Paste your TMDB token.');
     error.show('');
-    if (!displayName || !tmdbApiKey) return;
+    if (!displayName || (!tmdbApiKey && !tokenOptional)) return;
 
-    const keyChanged = !profile || profile.tmdbApiKey !== tmdbApiKey;
+    const keyChanged = Boolean(tmdbApiKey) && (!profile || profile.tmdbApiKey !== tmdbApiKey);
     const label = submit.textContent;
     submit.disabled = true;
     try {
@@ -250,8 +274,9 @@ function renderOfflineForm({ profile = null, restore = null } = {}) {
         window.location.href = 'main.html';
         return;
       }
-      if (profile) updateProfile(profile.id, { displayName, tmdbApiKey });
+      if (profile) updateProfile(profile.id, { displayName, tmdbApiKey: tmdbApiKey || null });
       else createProfile({ displayName, tmdbApiKey });
+      if (notice && profile) { openProfileFromList(getProfiles().find(p => p.id === profile.id)); return; }
       show('home');
     } catch (err) {
       console.error('Saving profile failed:', err);
@@ -359,15 +384,25 @@ function openProfile(profileId, next = 'main.html') {
 }
 
 // After a sign-in (key or code): the account's existing profile on this device, if any, just
-// gets the new session; otherwise the person picks a name and a TMDB token first (finish).
-function afterSignIn(signIn, { accountKey = null, restore = null } = {}) {
+// gets the new session; otherwise a new profile is made for it (named after the account, no TMDB
+// token needed), or the backup being restored becomes that profile.
+async function afterSignIn(signIn, { accountKey = null, restore = null } = {}) {
   const existing = profileForAccount(signIn.account.id);
   if (existing && !restore) {
     linkProfileToAccount(existing.id, signIn, { accountKey, keySaved: Boolean(accountKey) });
     openProfile(existing.id);
     return;
   }
-  show('finish', { signIn, accountKey, restore });
+  let profile;
+  if (restore) {
+    profile = await restoreBackup(restore.payload, { displayName: restore.payload.profile.displayName, tmdbApiKey: null });
+    pendingRestore = null;
+  } else {
+    profile = createProfile({ displayName: signIn.account.displayName, tmdbApiKey: null });
+  }
+  // Typing the key to sign in shows it was saved.
+  linkProfileToAccount(profile.id, signIn, { accountKey, keySaved: Boolean(accountKey) });
+  openProfile(profile.id);
 }
 
 function renderSignIn({ restore = null } = {}) {
@@ -398,7 +433,7 @@ function renderSignIn({ restore = null } = {}) {
     error.show('');
     submit.disabled = true;
     try {
-      afterSignIn(await signInWithAccountKey(accountKey), { accountKey, restore });
+      await afterSignIn(await signInWithAccountKey(accountKey), { accountKey, restore });
     } catch (err) {
       if (err.code === 'invalid_key_format' || err.code === 'wrong_key') keyField.setError(err.message);
       else error.show(err.message || 'Something went wrong. Try again.');
@@ -441,7 +476,7 @@ function renderPair({ restore = null } = {}) {
     error.show('');
     submit.disabled = true;
     try {
-      afterSignIn(await signInWithPairingCode(code), { restore });
+      await afterSignIn(await signInWithPairingCode(code), { restore });
     } catch (err) {
       if (err.code === 'invalid_code_format' || err.code === 'wrong_code') codeField.setError(err.message);
       else error.show(err.message || 'Something went wrong. Try again.');
@@ -453,84 +488,13 @@ function renderPair({ restore = null } = {}) {
   authEl.appendChild(el('p', 'auth__fine', 'Codes work once and expire after 10 minutes.'));
 }
 
-// A name and TMDB token for the new profile, shared by create and finish. Resolves
-// { displayName, tmdbApiKey } once both are valid, after checking the token with TMDB.
-function profileFields(form, { displayName = '' } = {}) {
-  const nameField = buildTextField({ label: 'Display name', icon: 'user', placeholder: 'Your name', autocomplete: 'nickname', maxLength: 40, value: displayName });
-  const tokenField = buildTextField({
-    label: 'TMDB API Read Access Token', type: 'password', icon: 'lock', placeholder: 'Paste your token',
-    autocomplete: 'off', helper: 'The long token on themoviedb.org → Settings → API',
-  });
-  tokenField.input.spellcheck = false;
-  form.appendChild(nameField);
-  form.appendChild(tokenField);
-  return async function read(submit) {
-    const name = nameField.input.value.trim();
-    const tmdbApiKey = tokenField.input.value.trim();
-    nameField.setError(name ? null : 'Enter a name.');
-    tokenField.setError(tmdbApiKey ? null : 'Paste your TMDB token.');
-    if (!name || !tmdbApiKey) return null;
-    submit.textContent = 'Checking token…';
-    const check = await validateTmdbApiKey(tmdbApiKey);
-    if (!check.ok) { tokenField.setError(check.message); return null; }
-    return { displayName: name, tmdbApiKey };
-  };
-}
-
-function renderFinish({ signIn, accountKey = null, restore = null }) {
-  authEl.appendChild(backButton(() => { discardSignIn(signIn); show('signin', { restore }); }));
-  authEl.appendChild(authHead({
-    title: 'Almost there',
-    text: `You're signed in as ${signIn.account.displayName}. Watchlog needs your TMDB token on this device too.`,
-  }));
-  const form = el('form', 'auth__form');
-  form.noValidate = true;
-  const read = profileFields(form, { displayName: restore ? restore.payload.profile.displayName : signIn.account.displayName });
-  const note = el('div', 'auth__note');
-  note.innerHTML = ttIcon('cloud', { size: 18 });
-  note.appendChild(el('span', null, restore
-    ? 'The backup is restored into this profile.'
-    : "Syncing your library between devices is coming in an update. Until then, this device starts with what's on it."));
-  form.appendChild(note);
-  const error = errorLine();
-  form.appendChild(error);
-  const submit = button(restore ? 'Restore backup' : 'Continue', 'primary', null, { type: 'submit' });
-  form.appendChild(submit);
-  form.addEventListener('submit', async event => {
-    event.preventDefault();
-    const label = submit.textContent;
-    submit.disabled = true;
-    error.show('');
-    try {
-      const fields = await read(submit);
-      if (!fields) return;
-      let profile;
-      if (restore) {
-        submit.textContent = 'Restoring…';
-        profile = await restoreBackup(restore.payload, fields);
-        pendingRestore = null;
-      } else {
-        profile = createProfile(fields);
-      }
-      linkProfileToAccount(profile.id, signIn, { accountKey, keySaved: Boolean(accountKey) });
-      openProfile(profile.id);
-    } catch (err) {
-      console.error('Finishing sign-in failed:', err);
-      error.show(err.message || 'Something went wrong. Try again.');
-    } finally {
-      submit.disabled = false;
-      submit.textContent = label;
-    }
-  });
-  authEl.appendChild(form);
-}
-
 function renderCreate() {
   authEl.appendChild(backButton(() => show('home')));
   authEl.appendChild(authHead({ title: 'Create your account', text: 'Track what you watch and pick up where you left off on any device.', centred: true }));
   const form = el('form', 'auth__form');
   form.noValidate = true;
-  const read = profileFields(form);
+  const nameField = buildTextField({ label: 'Name', icon: 'user', placeholder: 'Your name', autocomplete: 'nickname', maxLength: 40 });
+  form.appendChild(nameField);
   const error = errorLine();
   form.appendChild(error);
   const submit = button('Create account', 'primary', null, { type: 'submit' });
@@ -538,15 +502,14 @@ function renderCreate() {
   form.appendChild(el('p', 'auth__fine', "Next, you'll get an account key: a long code that signs you in on any device. Keep it somewhere safe. A recovery email is coming in an update."));
   form.addEventListener('submit', async event => {
     event.preventDefault();
-    const label = submit.textContent;
-    submit.disabled = true;
+    const displayName = nameField.input.value.trim();
+    nameField.setError(displayName ? null : 'Enter a name.');
+    if (!displayName) return;
     error.show('');
+    submit.disabled = true;
     try {
-      const fields = await read(submit);
-      if (!fields) return;
-      submit.textContent = 'Creating account…';
-      const created = await createOnlineAccount(fields.displayName);
-      const profile = createProfile(fields);
+      const created = await createOnlineAccount(displayName);
+      const profile = createProfile({ displayName: created.account.displayName, tmdbApiKey: null });
       linkProfileToAccount(profile.id, created, { accountKey: created.accountKey });
       show('save-key', { profileId: profile.id });
     } catch (err) {
@@ -554,7 +517,6 @@ function renderCreate() {
       error.show(err.message || 'Something went wrong. Try again.');
     } finally {
       submit.disabled = false;
-      submit.textContent = label;
     }
   });
   authEl.appendChild(form);
@@ -687,7 +649,6 @@ const SCREENS = {
   restore: renderRestore,
   signin: renderSignIn,
   pair: renderPair,
-  finish: renderFinish,
   create: renderCreate,
   'save-key': renderSaveKey,
   recover: renderRecover,
@@ -695,11 +656,15 @@ const SCREENS = {
 };
 
 // Other pages can open a screen directly: ?screen=save-key&profile=<id>&next=settings.html
-// (Settings, after a new key), or ?screen=signin (a signed-out profile).
+// (Settings, after a new key), ?screen=offline&profile=<id>&notice=token (a signed-out copy
+// that needs its own token), or ?screen=signin (a signed-out profile).
 (function start() {
   const params = new URLSearchParams(window.location.search);
   const screen = params.get('screen');
-  if (screen === 'save-key' && params.get('profile')) {
+  const profileParam = params.get('profile') && getProfiles().find(p => p.id === params.get('profile'));
+  if (screen === 'offline' && profileParam) {
+    show('offline', { profile: profileParam, notice: params.get('notice') === 'token' ? "You're signed out, so this copy needs your own TMDB token to keep working offline." : null });
+  } else if (screen === 'save-key' && params.get('profile')) {
     show('save-key', { profileId: params.get('profile'), next: params.get('next') || 'main.html' });
   } else if (ONLINE_ACCOUNTS && (screen === 'signin' || screen === 'create')) {
     show(screen);

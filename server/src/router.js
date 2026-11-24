@@ -6,10 +6,16 @@ export const API_PREFIX = '/v1';
 const ROUTES = [];
 
 // route('GET', '/sessions/:id', handler): handlers get { request, env, ctx, params } and return a
-// Response. They may throw an ApiError for an expected failure (401, 400, 429...).
+// Response. They may throw an ApiError for an expected failure (401, 400, 429...). A pattern
+// ending in '/*' matches the rest of the path as params.path ('/tmdb/*' -> 'movie/550').
 export function route(method, pattern, handler) {
   const names = [];
-  const regex = new RegExp(`^${API_PREFIX}${pattern.replace(/:(\w+)/g, (m, name) => { names.push(name); return '([^/]+)'; })}$`);
+  let source = pattern.replace(/:(\w+)/g, (m, name) => { names.push(name); return '([^/]+)'; });
+  if (source.endsWith('/*')) {
+    names.push('path');
+    source = `${source.slice(0, -2)}/(.+)`;
+  }
+  const regex = new RegExp(`^${API_PREFIX}${source}$`);
   ROUTES.push({ method, regex, names, handler });
 }
 

@@ -41,9 +41,11 @@ function openProfileDialog({ focusToken = false } = {}) {
 
   const nameField = buildTextField({ label: 'Display name', icon: 'user', value: user.displayName, required: true, maxLength: 40 });
   const nameInput = nameField.input;
+  const tokenOptional = isSignedIn(user);
   const tokenField = buildTextField({
-    label: 'TMDB API Read Access Token', type: 'password', icon: 'lock', value: user.tmdbApiKey, required: true,
-    autocomplete: 'off', helper: 'The long token on themoviedb.org → Settings → API',
+    label: 'TMDB API Read Access Token', type: 'password', icon: 'lock', value: user.tmdbApiKey || '', required: !tokenOptional,
+    autocomplete: 'off',
+    helper: tokenOptional ? "Optional: this online profile uses Watchlog's. Only needed to use it offline." : 'The long token on themoviedb.org → Settings → API',
   });
   const tokenInput = tokenField.input;
   tokenInput.spellcheck = false;
@@ -66,10 +68,10 @@ function openProfileDialog({ focusToken = false } = {}) {
     event.preventDefault();
     const displayName = nameInput.value.trim();
     const tmdbApiKey = tokenInput.value.trim();
-    if (!displayName || !tmdbApiKey) return;
+    if (!displayName || (!tmdbApiKey && !tokenOptional)) return;
     error.hidden = true;
     save.disabled = true;
-    if (tmdbApiKey !== user.tmdbApiKey) {
+    if (tmdbApiKey && tmdbApiKey !== user.tmdbApiKey) {
       save.textContent = 'Checking token…';
       const check = await validateTmdbApiKey(tmdbApiKey);
       if (!check.ok) {
@@ -80,7 +82,7 @@ function openProfileDialog({ focusToken = false } = {}) {
         return;
       }
     }
-    updateProfile(user.id, { displayName, tmdbApiKey });
+    updateProfile(user.id, { displayName, tmdbApiKey: tmdbApiKey || null });
     user = getActiveProfile();
     renderProfileCard();
     renderSections();
@@ -477,29 +479,68 @@ async function showDevices() {
   modal.appendChild(actions);
 }
 
-async function signOutThisDevice() {
-  const ok = await confirmDialog({
-    title: 'Sign out of the online account?',
-    message: `"${user.displayName}" stays on this device as an offline profile, with everything in it. You can sign in again with your account key.`,
-    confirmLabel: 'Sign out',
+// "Keep a copy" or "Remove it" when signing out (decided with the user: ask each time). Resolves
+// 'keep', 'remove', or null when cancelled.
+function keepOrRemoveDialog({ title, message, danger = false }) {
+  return new Promise(resolve => {
+    const { overlay, modal } = openDialog();
+    modal.appendChild(el('h2', null, title));
+    modal.appendChild(el('p', null, message));
+    const actions = el('div', 'confirm-actions confirm-actions--stacked');
+    const close = result => { overlay.remove(); resolve(result); };
+    const keep = dialogButton(isNativeApp() ? 'Keep a copy on this device' : 'Keep a copy in this browser', danger ? 'secondary' : 'primary');
+    keep.addEventListener('click', () => close('keep'));
+    const remove = dialogButton(isNativeApp() ? 'Remove it from this device' : 'Remove it from this browser', danger ? 'danger' : 'secondary');
+    remove.addEventListener('click', () => close('remove'));
+    const cancel = dialogButton('Cancel', 'secondary');
+    cancel.addEventListener('click', () => close(null));
+    [keep, remove, cancel].forEach(b => actions.appendChild(b));
+    modal.appendChild(actions);
+    overlay.addEventListener('click', event => { if (event.target === overlay) close(null); });
   });
-  if (!ok) return;
-  await accountAction(() => signOutOnlineAccount(user), "Couldn't sign out");
+}
+
+// After signing out or deleting the account: keep the profile as an offline one (it then needs
+// its own TMDB token, since the server's is for signed-in accounts), or remove it.
+function afterLeavingAccount(choice) {
+  if (choice === 'remove') {
+    deleteProfile(user.id);
+    window.location.href = 'profile-picker.html';
+    return;
+  }
   user = getActiveProfile();
+  if (!user.tmdbApiKey) {
+    window.location.href = `profile-picker.html?screen=offline&profile=${encodeURIComponent(user.id)}&notice=token`;
+    return;
+  }
   renderSections();
+}
+
+async function signOutThisDevice() {
+  const choice = await keepOrRemoveDialog({
+    title: 'Sign out of the online account?',
+    message: `Keep "${user.displayName}" here as an offline profile, with everything in it (it then needs your own TMDB token), or remove it, for example on a shared computer. You can sign in again any time with your account key.`,
+  });
+  if (!choice) return;
+  if ((await accountAction(() => signOutOnlineAccount(user).then(() => true), "Couldn't sign out")) === undefined) return;
+  afterLeavingAccount(choice);
 }
 
 async function deleteAccount() {
   const ok = await confirmDialog({
     title: 'Delete the online account?',
-    message: 'This deletes the account on the server and signs out every device. This profile stays on this device as an offline profile. It can\'t be undone.',
+    message: 'This deletes the account on the server and signs out every device. It can\'t be undone.',
     confirmLabel: 'Delete account',
     danger: true,
   });
   if (!ok) return;
-  await accountAction(() => deleteOnlineAccount(user), "Couldn't delete the account");
-  user = getActiveProfile();
-  renderSections();
+  const choice = await keepOrRemoveDialog({
+    title: `And "${user.displayName}" on this device?`,
+    message: 'Keep it as an offline profile, with everything in it (it then needs your own TMDB token), or remove it too.',
+  });
+  if (!choice) return;
+  if ((await accountAction(() => deleteOnlineAccount(user).then(() => true), "Couldn't delete the account")) === undefined) return;
+  afterLeavingAccount(choice);
 }
 
 // The "Online account" section: nothing while online accounts are hidden, unless this profile
@@ -520,7 +561,7 @@ function onlineAccountSection() {
         value: 'Sign in',
         onClick: () => { window.location.href = 'profile-picker.html?screen=signin'; },
       }),
-      settingsRow({ label: 'Make it an offline profile', sub: 'Keep everything on this device, without the account', onClick: signOutThisDevice }),
+      settingsRow({ label: 'Make it an offline profile', sub: 'Keep everything on this device, without the account', onClick: () => { unlinkProfileAccount(user.id); afterLeavingAccount('keep'); } }),
     ]);
   }
   return settingsSection('Online account', [
@@ -607,7 +648,9 @@ function renderSections() {
   if (online) container.appendChild(online);
 
   container.appendChild(settingsSection('Account', [
-    settingsRow({ label: 'TMDB token', sub: 'The API Read Access Token this profile uses', value: 'Change', onClick: () => openProfileDialog({ focusToken: true }) }),
+    isSignedIn(user)
+      ? settingsRow({ label: 'TMDB token', sub: "Not needed: this online profile uses Watchlog's", value: user.tmdbApiKey ? 'Change' : 'Add', onClick: () => openProfileDialog({ focusToken: true }) })
+      : settingsRow({ label: 'TMDB token', sub: 'The API Read Access Token this profile uses', value: 'Change', onClick: () => openProfileDialog({ focusToken: true }) }),
     settingsRow({ label: 'Switch profile', onClick: () => logout() }),
     settingsRow({ label: 'Reset all data', sub: 'Empties this profile\'s library on this phone', danger: true, onClick: resetAllData }),
     settingsRow({ label: 'Delete profile', sub: 'Removes the profile and all its data from this phone', danger: true, onClick: deleteThisProfile }),

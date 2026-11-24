@@ -28,7 +28,9 @@
   "vars": {
     "ENVIRONMENT": "production",
     // Origins besides the site itself that may call the API: the Android app.
-    "ALLOWED_ORIGINS": "https://localhost"
+    "ALLOWED_ORIGINS": "https://localhost",
+    // "off" pauses the TMDB proxy (server/src/routes/tmdb.js). Its token is the TMDB_TOKEN secret.
+    "TMDB_PROXY": "on"
   },
   "d1_databases": [
     {
@@ -49,7 +51,8 @@
   "previews": {
     "vars": {
       "ENVIRONMENT": "preview",
-      "ALLOWED_ORIGINS": "https://localhost"
+      "ALLOWED_ORIGINS": "https://localhost",
+      "TMDB_PROXY": "on"
     },
     "observability": { "enabled": true },
     "d1_databases": [

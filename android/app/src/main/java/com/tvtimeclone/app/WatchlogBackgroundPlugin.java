@@ -42,6 +42,8 @@ public class WatchlogBackgroundPlugin extends Plugin {
         SharedPreferences.Editor editor = getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit();
         editor.putBoolean("enabled", enabled);
         editor.putString("apiKey", enabled ? call.getString("apiKey", "") : "");
+        // TMDB itself, or the Watchlog server's TMDB proxy for an online profile (same request shape).
+        editor.putString("tmdbBaseUrl", enabled ? call.getString("tmdbBaseUrl", "") : "");
         editor.putInt("notifyHour", call.getInt("notifyHour", 18));
         editor.putString("smallIcon", call.getString("smallIcon"));
         editor.putString("shows", shows.toString());

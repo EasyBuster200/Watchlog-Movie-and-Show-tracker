@@ -171,3 +171,29 @@ test('the save-your-key check: the last 4 characters, as a person might type the
   assert.equal(app.run(`accountKeyConfirmMatches('${key}', '45')`), false, 'exactly 4');
   assert.equal(app.run("formatAccountKey('abcdefghjk')"), 'ABCD-EFGH-JK');
 });
+
+test("an online profile's TMDB requests go through the server, and a signed-out reply ends the session", async () => {
+  let signedIn = true;
+  const app = createApp({
+    server: (method, path, req) => (signedIn
+      ? { body: { results: [{ id: 1, title: 'Shown', adult: false }, { id: 2, title: 'Hidden', adult: true }] } }
+      : { status: 401, body: { error: 'signed_out', message: 'x' } }),
+  });
+  const id = app.run('getActiveProfileId()');
+  app.run(`linkProfileToAccount('${id}', ${JSON.stringify(signInReply().body)})`);
+
+  const ok = await app.api('GET', '/api/tmdb/trending/movie/week');
+  assert.equal(ok.status, 200);
+  assert.deepEqual(ok.body.results.map(r => r.title), ['Shown'], 'adult titles are still filtered');
+  assert.equal(app.serverRequests[0].url, 'http://localhost/v1/tmdb/trending/movie/week');
+  assert.equal(app.serverRequests[0].headers.Authorization, 'Bearer token-1');
+  assert.equal(app.tmdbCalls.length, 0, 'TMDB is never called directly');
+
+  signedIn = false;
+  assert.equal((await app.api('GET', '/api/tmdb/trending/movie/week')).status, 401);
+  assert.equal(activeAccount(app).sessionToken, null);
+
+  // Signed out, it falls back to the profile's own token (this test profile has one).
+  await app.api('GET', '/api/tmdb/movie/550');
+  assert.deepEqual(app.tmdbCalls, ['/movie/550']);
+});
