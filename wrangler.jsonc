@@ -1,15 +1,60 @@
-// Cloudflare Workers config for the web app: serves public/ as static files, no server code
-// (yet; the accounts/sync API in docs/ROADMAP.md will be added to this same Worker).
-// Cloudflare's Git integration runs the build command `node tools/write-web-version.js`, then
-// `npx wrangler deploy` for main and `npx wrangler preview` for other branches (each pull
-// request gets its own preview address). `wrangler preview` refuses to run without the
-// `previews` block below; empty means the preview uses the same settings as production.
-// See docs/DEVELOPMENT.md, "Hosting on Cloudflare".
+// Cloudflare Workers config: the `watchlog` Worker serves the app's files (public/) and the
+// server API (server/src/index.js, under /v1/). See docs/DEVELOPMENT.md, "Hosting on Cloudflare"
+// and "The server".
+//
+// Cloudflare's Git integration runs `node tools/write-web-version.js`, then `npm run cf:deploy`
+// for main and `npm run cf:preview` for other branches (package.json): each applies the database
+// migrations (server/migrations) before uploading the code.
+//
+// Production and previews use different databases. Previews don't inherit anything from the
+// top level except assets, compatibility_date and compatibility_flags, so whatever previews need
+// is repeated in the `previews` block. wrangler.preview-db.jsonc names the preview database too
+// (for applying migrations to it); keep its database_id the same as below.
 {
   "name": "watchlog",
+  "main": "server/src/index.js",
   "compatibility_date": "2026-11-01",
   "assets": {
-    "directory": "./public"
+    "directory": "./public",
+    "binding": "ASSETS"
   },
-  "previews": {}
+  "observability": { "enabled": true },
+
+  // ---------- Production ----------
+  "vars": {
+    "ENVIRONMENT": "production",
+    // Origins besides the site itself that may call the API: the Android app.
+    "ALLOWED_ORIGINS": "https://localhost"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "watchlog",
+      "database_id": "REPLACE_WITH_PRODUCTION_DATABASE_ID",
+      "migrations_dir": "server/migrations"
+    }
+  ],
+  "r2_buckets": [
+    { "binding": "BACKUPS", "bucket_name": "REPLACE_WITH_BACKUP_BUCKET_NAME" }
+  ],
+  // Weekly database backup to R2, Sundays 03:00 UTC (server/src/backup.js).
+  "triggers": { "crons": ["0 3 * * SUN"] },
+
+  // ---------- Previews (one per branch / pull request) ----------
+  // No R2 bucket and no cron: Cron Triggers never run in previews.
+  "previews": {
+    "vars": {
+      "ENVIRONMENT": "preview",
+      "ALLOWED_ORIGINS": "https://localhost"
+    },
+    "observability": { "enabled": true },
+    "d1_databases": [
+      {
+        "binding": "DB",
+        "database_name": "watchlog-preview",
+        "database_id": "REPLACE_WITH_PREVIEW_DATABASE_ID",
+        "migrations_dir": "server/migrations"
+      }
+    ]
+  }
 }

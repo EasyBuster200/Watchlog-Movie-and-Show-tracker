@@ -152,5 +152,7 @@ self.addEventListener('fetch', event => {
   if (url.origin !== self.location.origin) return;
   // version.json says which build is deployed; always ask the server.
   if (url.pathname.endsWith('/version.json')) return;
+  // The server API (/v1/...) is live, private data: never cache or answer it from the cache.
+  if (url.pathname === '/v1' || url.pathname.startsWith('/v1/')) return;
   event.respondWith(networkFirst(request));
 });

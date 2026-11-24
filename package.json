@@ -5,7 +5,10 @@
   "scripts": {
     "sync": "cap sync android",
     "open:android": "cap open android",
-    "test": "node --test tests/"
+    "test": "node --test tests/",
+    "test:server": "node --test server/test/",
+    "cf:deploy": "npx wrangler d1 migrations apply DB --remote && npx wrangler deploy",
+    "cf:preview": "npx wrangler d1 migrations apply DB --remote --config wrangler.preview-db.jsonc && npx wrangler preview"
   },
   "keywords": [],
   "author": "",

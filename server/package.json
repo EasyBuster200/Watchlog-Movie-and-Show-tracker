@@ -1,0 +1,4 @@
+{
+  "//": "server/ is ES modules (the Worker); tests here need Node 22.5+ for node:sqlite",
+  "type": "module"
+}
