@@ -160,6 +160,16 @@ settings: **Production** (build and deploy command, used for `main`) and **Previ
 (build and preview command, used for every other branch). A change on one tab doesn't reach the
 other, so the build command has to be `npm run cf:build` on both.
 
+Two more traps in that page:
+
+- **Each preview copies Previews Base when it's created and keeps that copy.** Changing Previews
+  Base only affects branches pushed for the first time afterwards. An existing preview has its
+  own **Build configuration** on its own Settings page (switch from Production to the branch at
+  the top of the dashboard); change it there, or delete the preview and push again.
+- Every section saves separately (the **Save** in the "Unsaved changes" bar), and the
+  Production / Previews Base switch has been seen showing the other tab's values. After a change,
+  reload the page and check both tabs.
+
 Every push to `main` then deploys the site, live at **https://watchlog.duartecruzcoelho.workers.dev**,
 and every other branch gets its own preview address, `https://<branch>-watchlog.<subdomain>.workers.dev`
 (the pull request's "Workers Builds" check links to the build, whose **Visit** button opens it),
