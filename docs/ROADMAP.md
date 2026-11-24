@@ -15,7 +15,7 @@ Status: **Phase 1 (web app) is done and live at https://watchlog.duartecruzcoelh
 | Topic | Decision |
 |---|---|
 | Hosting | Everything on **Cloudflare**: one Worker (`watchlog`, `wrangler.jsonc`) serves the app files now and will also run the API, D1 (SQLite) for the database, Worker secrets for keys. One account, one platform. |
-| Sign-in | **Passkeys** (Face ID, fingerprint, screen lock). No passwords. |
+| Sign-in | An **account key** (a long random key the person saves) plus an optional, verified **recovery email**. Devices stay signed in; new ones are added with a one-time code from a signed-in device. No passwords, no passkeys for now (see Phase 3). |
 | Architecture | **Local-first stays.** IndexedDB on the device is what the app reads and writes. The server is a sync partner and backup, never something a screen waits on. |
 | Offline-only use | Still supported: a **local account** works like today's profiles, with no server and the person's own TMDB token. |
 | Backups | Remove the automatic weekly backup to `Documents/Watchlog`. Keep manual **Export / Import**. For online accounts the server copy is the backup. |
@@ -41,7 +41,7 @@ Status: **Phase 1 (web app) is done and live at https://watchlog.duartecruzcoelh
                       v
      +------------------------------------------+
      |  Cloudflare Worker  (api.<domain>)       |
-     |   /auth    passkeys, sessions            |
+     |   /auth    account keys, sessions, email  |
      |   /sync    push / pull changes           |
      |   /tmdb    TMDB proxy (owner's token)    |
      |   /friends friends, feed, shared lists   |
@@ -95,22 +95,39 @@ Do this first: it works with today's local profiles and needs no backend.
 ### Two kinds of account
 
 - **Local account:** today's profile, unchanged. Data stays on the device. Uses the person's own TMDB token. Never talks to the server. Anyone can use the app this way at no cost to the owner.
-- **Online account:** signs in with a passkey. Syncs, can have friends, and uses TMDB through the server, so **no TMDB token is needed**.
+- **Online account:** signs in with its account key (below). Syncs, can have friends, and uses TMDB through the server, so **no TMDB token is needed**.
 
 The profile picker offers both. A local account can later be **upgraded** to an online one: sign up, then its existing IndexedDB data is uploaded as the first sync.
 
-### Passkeys
+### Signing in: an account key, with a recovery email
 
-- WebAuthn, with **SimpleWebAuthn** on the Worker (it runs on Workers).
-- The relying party ID is the app's domain (the `workers.dev` address or a custom one). **Decide the domain before launch:** passkeys are tied to it, so changing it later means everyone re-registers.
-- **Multiple passkeys per account.** Passkeys sync within Apple's or Google's ecosystem, but not between them. Adding a second device:
-  - sign in on the new device by scanning a QR code with a device that already has a passkey (the standard cross-device sign-in), then
-  - offer to create a passkey on the new device.
-- **Recovery:** losing every device must not mean losing the account. Show **one-time recovery codes** at sign-up (no email needed). Email recovery could come later.
-- **Android app caveat:** the app runs in a WebView at `https://localhost`, where WebAuthn doesn't work by default. Options, to decide when building:
-  1. enable WebView WebAuthn support (androidx.webkit) and publish a Digital Asset Links file (`/.well-known/assetlinks.json`) on the domain, tied to the release signing key; or
-  2. use a Capacitor passkey plugin built on Android's Credential Manager (also needs `assetlinks.json`); or
-  3. sign in through the system browser and hand a session back to the app via the existing `custom_url_scheme`.
+Decided with the user after comparing passkeys, passwords, email codes, "Sign in with Google", Cloudflare Access and hosted login services. Passkeys were dropped as the main sign-in because they're tied to the domain, hard to use inside the Android app's WebView (it runs at `https://localhost`), and unavailable on older phones. Passwords were dropped because proper password hashing doesn't fit the free plan's 10 ms CPU per request, and a leaked password table is a liability.
+
+**The account key**
+- Creating an online account generates a long random **account key** (about 128 bits). It's shown in a human-friendly form, in groups with a check character so typos are caught (e.g. `WLG4-7KQ2-…`).
+- It's the account's credential: entering it on any device signs that device in. The server stores only a hash of it. The key is random and long, so a fast hash (SHA-256) is safe and fits the free plan's CPU limit.
+- At sign-up the app makes saving it easy: **Save to Files**, copy (for a password manager), or print. It then asks for the last few characters to confirm it was saved. Profile reminds people who never confirmed, like the web app's backup reminder.
+- **Settings → Account key** shows it again on any signed-in device, and **Make a new key** replaces it (the old one stops working at once).
+- No domain lock-in and no WebView problems: the key is typed (or scanned as a QR code) inside the app on every platform, including the Android app and older phones.
+
+**Adding a device**
+- Usually without the key: on a signed-in device, **Settings → Add a device** shows a one-time code and QR code (valid a few minutes). The new device enters or scans it and is signed in.
+- Or by entering the account key.
+
+**The recovery email**
+- For when every signed-in device *and* the key are lost. An email address can be added to the account and is **verified** with a code sent to it before it counts.
+- **Recovery:** on a new device, "Lost your key?", then enter the email, then a one-time code arrives, then enter it. The account then gets a **new key** (the old one stops working), and every other session is signed out.
+- **Safeguard against a hacked inbox:** recovery completes after a **hold** (proposed 24 hours). During it, every signed-in device shows "Someone is recovering your account. Not you? Cancel", and the address gets an email saying the same.
+- Only the address is stored, and only for recovery and notices about the account (no newsletters). It can be changed or removed in Settings.
+- **Sending email needs a domain we own:** every email service requires proving ownership of the sender's domain, and `workers.dev` can't be used. See [Open questions](#open-questions).
+
+**Other safeguards**
+- Signing in with a key and recovery requests are rate-limited (per address and per account); Turnstile guards account creation and recovery.
+- **Settings → Devices** lists every signed-in device with its last use; any can be signed out from another.
+- Last resort, for family: the owner can issue a new key from the admin page after checking identity (logged in the audit log).
+- Even if an account is truly lost, the library isn't: it's on the person's devices and in their exported backups, and can fill a new account.
+
+**Possible later additions:** trusted-friend recovery (once friends exist, Phase 7) and optional passkeys as a faster sign-in, once the domain is settled.
 
 ### Sessions
 
@@ -251,7 +268,7 @@ Local accounts have no friends features.
 **Users**
 - list with username, created, last seen, devices/sessions, status (active, pending, suspended), storage used, TMDB calls today/this month
 - approve pending sign-ups, suspend, unsuspend, delete (with their data), revoke sessions
-- reset passkeys / generate new recovery codes for someone locked out
+- issue a new account key for someone locked out (after checking who they are), or cancel a recovery in progress
 
 **Sign-ups and invites**
 - sign-up mode: closed / invite-only / request-approval
@@ -276,7 +293,7 @@ People's watch history and lists are **not** visible on the admin page. It shows
 
 ## Privacy and legal basics (EU / GDPR)
 
-- A short **privacy policy** page: what's stored (username, passkey public keys, library, friends, push subscriptions), where (Cloudflare), why, and for how long.
+- A short **privacy policy** page: what's stored (the account key's hash, the recovery email, username, library, friends, push subscriptions), where (Cloudflare), why, and for how long.
 - **Export my data:** existing manual export, plus server-side data for online accounts.
 - **Delete my account:** removes server data, sessions and push subscriptions; local data stays unless the person deletes the profile.
 - Store only what's needed: no real names or emails required.
@@ -289,14 +306,15 @@ People's watch history and lists are **not** visible on the admin page. It shows
 | Cloudflare Workers, D1, R2, Access, Turnstile | €0 at friends-and-family scale |
 | TMDB API | €0 (non-commercial) |
 | Apple developer account / Mac | Not needed |
-| Custom domain | Optional, about €10/year. Recommended before launch because passkeys are tied to the domain. |
+| Custom domain | About €10/year. Needed to send recovery emails (the sender must be on a domain we own). |
+| Email sending | Free at this scale (Cloudflare Email Sending or Resend's free tier; see Open questions). |
 | If it grows past free limits | Workers Paid, $5/month |
 
 ## Build order
 
 1. Phase 1: PWA (no backend). **Done.**
 2. Phase 2: backend foundation
-3. Phase 3: accounts (passkeys, invites, local vs online, upgrade a local account)
+3. Phase 3: accounts (account key, device pairing, recovery email, invites, local vs online, upgrade a local account)
 4. Phase 5: TMDB proxy (so online accounts need no token); can be built alongside Phase 3
 5. Phase 8 (part 1): admin page with users, invites, limits and kill switch. **Needed before inviting anyone.**
 6. Phase 4: sync, then remove auto-backup and add the local-account backup reminder
@@ -308,8 +326,10 @@ Each step leaves a working app.
 
 ## Open questions
 
-- **Domain:** buy a custom domain, or stay on `*.workers.dev`? Decide before Phase 3 (passkeys are tied to it).
-- **Android sign-in:** WebView WebAuthn, a Credential Manager plugin, or sign-in via the browser? Decide in Phase 3.
+- **Domain:** a custom domain is needed to send recovery emails (Phase 3). Which one? The app can stay on `workers.dev` and only email come from the domain, or the app can move to it too (no sign-in depends on the address any more, so moving later is safe).
+- **Email service:** Cloudflare Email Sending (beta, same platform; check its free limits) or Resend (free tier, about 100 emails a day). Both need the domain's DNS records.
+- **Recovery email required or optional?** Proposed: asked at sign-up, skippable, with a reminder later (like the backup reminder).
+- **Recovery hold:** 24 hours proposed. Shorter is friendlier; longer is safer if someone's inbox is hacked.
 - **Several profiles on one device:** can each be a different online account (e.g. family members sharing a tablet)? Proposed: yes, one online account per profile.
 - **Android notifications:** keep local notifications permanently, or move to server push later?
 - **Usernames:** required for everyone, or only when turning on friends?
