@@ -1,4 +1,4 @@
-// Used only to apply database migrations to the PREVIEW database (`npm run cf:preview`):
+// Used only to apply database migrations to the PREVIEW database (`npm run cf:build`):
 // `wrangler d1 migrations apply DB --remote --config wrangler.preview-db.jsonc`.
 // Must name the same database as the `previews` block in wrangler.jsonc
 // (tests/server-config.test.js checks).
@@ -9,7 +9,7 @@
     {
       "binding": "DB",
       "database_name": "watchlog-preview",
-      "database_id": "REPLACE_WITH_PREVIEW_DATABASE_ID",
+      "database_id": "a087549a-24fe-474e-82ad-cefb347d05d0",
       "migrations_dir": "server/migrations"
     }
   ]

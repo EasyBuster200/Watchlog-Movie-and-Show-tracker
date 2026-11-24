@@ -70,6 +70,8 @@ test('the Worker script, static files, backups bucket and weekly schedule are co
 
 test('deploys apply migrations to the right database before uploading', () => {
   const { scripts } = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.match(scripts['cf:deploy'], /^npx wrangler d1 migrations apply DB --remote && npx wrangler deploy$/);
-  assert.match(scripts['cf:preview'], /--config wrangler\.preview-db\.jsonc && npx wrangler preview$/);
+  // Every build (previews and main) migrates the preview database; only main's deploy step
+  // touches production (previews run Cloudflare's fixed `npx wrangler preview`).
+  assert.equal(scripts['cf:build'], 'node tools/write-web-version.js && npx wrangler d1 migrations apply DB --remote --config wrangler.preview-db.jsonc');
+  assert.equal(scripts['cf:deploy'], 'npx wrangler d1 migrations apply DB --remote && npx wrangler deploy');
 });

@@ -2,9 +2,11 @@
 // server API (server/src/index.js, under /v1/). See docs/DEVELOPMENT.md, "Hosting on Cloudflare"
 // and "The server".
 //
-// Cloudflare's Git integration runs `node tools/write-web-version.js`, then `npm run cf:deploy`
-// for main and `npm run cf:preview` for other branches (package.json): each applies the database
-// migrations (server/migrations) before uploading the code.
+// Cloudflare's Git integration (package.json scripts):
+// - every build, previews and main alike, runs `npm run cf:build`: writes version.json and
+//   applies the database migrations (server/migrations) to the PREVIEW database;
+// - main then runs `npm run cf:deploy`: migrations to the PRODUCTION database, then deploys;
+// - other branches run `npx wrangler preview` (fixed by Cloudflare, not configurable).
 //
 // Production and previews use different databases. Previews don't inherit anything from the
 // top level except assets, compatibility_date and compatibility_flags, so whatever previews need
@@ -30,12 +32,12 @@
     {
       "binding": "DB",
       "database_name": "watchlog",
-      "database_id": "REPLACE_WITH_PRODUCTION_DATABASE_ID",
+      "database_id": "1078bee2-1185-43bd-9ebf-120384890ceb",
       "migrations_dir": "server/migrations"
     }
   ],
   "r2_buckets": [
-    { "binding": "BACKUPS", "bucket_name": "REPLACE_WITH_BACKUP_BUCKET_NAME" }
+    { "binding": "BACKUPS", "bucket_name": "watchlog-backups" }
   ],
   // Weekly database backup to R2, Sundays 03:00 UTC (server/src/backup.js).
   "triggers": { "crons": ["0 3 * * SUN"] },
@@ -52,7 +54,7 @@
       {
         "binding": "DB",
         "database_name": "watchlog-preview",
-        "database_id": "REPLACE_WITH_PREVIEW_DATABASE_ID",
+        "database_id": "a087549a-24fe-474e-82ad-cefb347d05d0",
         "migrations_dir": "server/migrations"
       }
     ]
