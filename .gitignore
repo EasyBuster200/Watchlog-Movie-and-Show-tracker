@@ -2,3 +2,7 @@ node_modules/
 
 # Release APK copied here for "gh release create" (see docs/DEVELOPMENT.md)
 /Watchlog.apk
+
+# Cloudflare Worker (server/, see docs/ROADMAP.md): local secrets and Wrangler's state
+.dev.vars
+.wrangler/

@@ -11,6 +11,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { IDBFactory, IDBKeyRange } = require('fake-indexeddb');
+// The browser's `crypto` (Web Crypto). Only a global from Node 19 on, so take it from node:crypto
+// to keep the tests running on Node 18 (CI runs them there).
+const { webcrypto: crypto } = require('node:crypto');
 
 const SCRIPTS_DIR = path.join(__dirname, '..', 'public', 'scripts');
 const PAGE_SCRIPTS = [
