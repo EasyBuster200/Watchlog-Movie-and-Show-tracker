@@ -1,5 +1,6 @@
 // The search results page (?q=<query>&type=movie|tv): the search field (results update as you
-// type), All / Shows / Movies / People chips with how many of each are on this page, then the
+// type), a BrowseHeader whose summary says how many results there are and whose filter sheet
+// picks All / Shows / Movies / People (with how many of each are on this page), then the
 // results as rows, with Prev/Next paging through TMDB's multi-search.
 
 const SEARCH_PAGE_DEBOUNCE_MS = 350;
@@ -20,36 +21,56 @@ function syncUrl() {
   window.history.replaceState(null, '', `${window.location.pathname}${params.toString() ? `?${params}` : ''}`);
 }
 
+let searchHeader = null;
+
+function searchSummaryText() {
+  if (!searchState.query) return 'Search for a movie, show or person.';
+  const filter = SEARCH_FILTERS.find(f => f.id === searchState.filter);
+  const n = searchState.results.filter(filter.match).length;
+  const kind = searchState.filter === 'all' ? '' : `${filter.label} · `;
+  return `${kind}${n} result${n === 1 ? '' : 's'} for “${searchState.query}”${searchState.totalPages > 1 ? ` · page ${searchState.page}` : ''}`;
+}
+
+// The filter sheet's Type choices carry this page's counts ("Shows 12").
 function renderChips() {
-  const chipsEl = document.getElementById('search-chips');
-  chipsEl.innerHTML = '';
-  SEARCH_FILTERS.forEach(f => chipsEl.appendChild(buildChip(f.label, {
-    selected: searchState.filter === f.id,
-    count: searchState.query ? searchState.results.filter(f.match).length : null,
-    onClick: () => {
-      searchState.filter = f.id;
+  const options = SEARCH_FILTERS.map(f => ({
+    id: f.id,
+    label: searchState.query ? `${f.label} ${searchState.results.filter(f.match).length}` : f.label,
+    summary: f.label,
+  }));
+  const next = {
+    sections: [{ id: 'type', label: 'Show', kind: 'single', options }],
+    values: { type: searchState.filter },
+    summary: searchSummaryText(),
+  };
+  if (searchHeader) {
+    searchHeader.update(next);
+    return;
+  }
+  searchHeader = createBrowseHeader({
+    ...next,
+    onChange: ({ values }) => {
+      searchState.filter = values.type;
       syncUrl();
       renderChips();
       renderResults();
     },
-  })));
+  });
+  document.getElementById('search-chips').appendChild(searchHeader.el);
 }
 
 function renderResults() {
   const list = document.getElementById('search-results-list');
-  const summary = document.getElementById('search-summary');
   const emptyEl = document.getElementById('search-empty');
   const filter = SEARCH_FILTERS.find(f => f.id === searchState.filter);
   const shown = searchState.results.filter(filter.match);
 
   list.innerHTML = '';
   if (!searchState.query) {
-    summary.textContent = 'Search for a movie, show or person.';
     emptyEl.hidden = true;
     renderPagination(document.getElementById('search-results-pagination'), 1, 1, () => {});
     return;
   }
-  summary.textContent = `${shown.length} result${shown.length === 1 ? '' : 's'} for “${searchState.query}”${searchState.totalPages > 1 ? ` · page ${searchState.page}` : ''}`;
   emptyEl.hidden = shown.length > 0;
   shown.forEach(raw => {
     const item = raw.media_type === 'person' ? normalizeTmdbPerson(raw) : toStandardItem(raw);

@@ -98,6 +98,11 @@ const TT_ICON_PATHS = {
   more: ['M10.5 12a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0z', 'M3.5 12a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0z', 'M17.5 12a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0z'],
   cloud: ['M7 18.5h10.5a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.6 9.1 4.75 4.75 0 0 0 7 18.5z', 'M9.5 13.5l2 2 3.5-3.5'],
   sliders: ['M4 7h10', 'M18 7h2', 'M16 5v4', 'M4 17h4', 'M12 17h8', 'M10 15v4'],
+  sort: ['M7 4v16', 'M3.5 7.5L7 4l3.5 3.5', 'M17 20V4', 'M13.5 16.5L17 20l3.5-3.5'],
+  down: ['M6 9l6 6 6-6'],
+  eyeoff: ['M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M4 4l16 16'],
+  mail: ['M3.5 6h17v12h-17z', 'M3.5 7l8.5 6.5L20.5 7'],
+  lock: ['M5.5 11h13v9.5h-13z', 'M8.5 11V8a3.5 3.5 0 0 1 7 0v3'],
   calendar: ['M4 6.5h16v14H4z', 'M4 10.5h16', 'M8 3.5v4', 'M16 3.5v4'],
 };
 
@@ -220,6 +225,273 @@ function buildChip(label, { selected = false, count = null, check = false, onCli
   if (count != null) chip.appendChild(el('span', 'tt-chip__count', String(count)));
   if (onClick) chip.addEventListener('click', onClick);
   return chip;
+}
+
+// The design's TextField: a label (with an optional element on its right, e.g. a link), a 48px
+// box with an optional leading icon, and a helper or error line. type 'password' adds a
+// show/hide button. Returns the wrapper; `.input` is the <input>, `.setError(msg)` shows an
+// error (null clears it).
+let ttFieldCount = 0;
+function buildTextField({ label, type = 'text', placeholder = '', value = '', icon = null, helper = '', aside = null, autocomplete = null, name = null, required = false, maxLength = null, inputMode = null } = {}) {
+  ttFieldCount += 1;
+  const id = `tt-field-${ttFieldCount}`;
+  const field = el('div', 'tt-field');
+  const top = el('div', 'tt-field__top');
+  const labelEl = el('label', 'tt-field__label', label);
+  labelEl.htmlFor = id;
+  top.appendChild(labelEl);
+  if (aside) top.appendChild(aside);
+  field.appendChild(top);
+
+  const box = el('div', 'tt-field__box');
+  if (icon) box.insertAdjacentHTML('beforeend', ttIcon(icon, { size: 18 }));
+  const input = document.createElement('input');
+  input.id = id;
+  input.type = type;
+  input.placeholder = placeholder;
+  input.value = value;
+  input.required = required;
+  if (autocomplete) input.autocomplete = autocomplete;
+  if (name) input.name = name;
+  if (maxLength) input.maxLength = maxLength;
+  if (inputMode) input.inputMode = inputMode;
+  box.appendChild(input);
+  if (type === 'password') {
+    const reveal = el('button', 'tt-field__reveal');
+    reveal.type = 'button';
+    const sync = shown => {
+      input.type = shown ? 'text' : 'password';
+      reveal.setAttribute('aria-pressed', shown ? 'true' : 'false');
+      reveal.setAttribute('aria-label', `${shown ? 'Hide' : 'Show'} ${label.toLowerCase()}`);
+      reveal.innerHTML = ttIcon(shown ? 'eyeoff' : 'eye', { size: 18 });
+    };
+    reveal.addEventListener('click', () => sync(input.type === 'password'));
+    sync(false);
+    box.appendChild(reveal);
+  }
+  field.appendChild(box);
+
+  const hint = el('span', 'tt-field__hint', helper);
+  hint.id = `${id}-hint`;
+  hint.hidden = !helper;
+  field.appendChild(hint);
+  input.setAttribute('aria-describedby', hint.id);
+
+  field.input = input;
+  field.setError = message => {
+    field.classList.toggle('tt-field--error', !!message);
+    input.setAttribute('aria-invalid', message ? 'true' : 'false');
+    hint.textContent = message || helper;
+    hint.hidden = !message && !helper;
+  };
+  return field;
+}
+
+// The design's BrowseHeader: an optional title, a one-line summary of what's applied, a sort
+// icon (a small menu that applies at once) and a filter icon (a bottom sheet with segmented
+// choices for `single` sections - the first option means "no filter" - and a two-column
+// checklist for `multi` ones, applied with "Show results"; a dot marks active filters).
+// Options are { id, label, summary? } (label may carry a count, e.g. "Shows 12"; summary is the
+// text used in the summary line). onChange({ sort, values }) fires when the sort changes or the
+// sheet is applied. Returns { el, update(next), state }: update() takes any of title /
+// sortOptions / sort / sections / values / summary, e.g. once genres have loaded.
+function createBrowseHeader({ title = null, level = 2, sortOptions = [], sort = null, sections = [], values = {}, summary = null, onChange } = {}) {
+  const st = { title, level, sortOptions, sections, summary, sort: sort || (sortOptions[0] && sortOptions[0].id), values: {}, open: null, draft: null };
+  const defaultFor = sec => (sec.kind === 'multi' ? [] : sec.options[0] && sec.options[0].id);
+  const isActive = (sec, v) => (sec.kind === 'multi' ? (v || []).length > 0 : v != null && v !== defaultFor(sec));
+  const labelOf = (sec, id) => {
+    const o = sec.options.find(x => x.id === id);
+    return o ? (o.summary || o.label) : String(id);
+  };
+  const setValues = vals => {
+    st.values = {};
+    st.sections.forEach(sec => { st.values[sec.id] = vals[sec.id] != null ? vals[sec.id] : defaultFor(sec); });
+  };
+  setValues(values);
+
+  const root = el('div', 'tt-bh');
+  // The sheet is drawn into its own layer on <body>: inside a sticky header it would be trapped
+  // in the header's stacking context, under the bottom nav.
+  const layer = el('div', 'tt-bh-layer');
+  const emit = () => { if (onChange) onChange({ sort: st.sort, values: { ...st.values } }); };
+  const checkMark = () => `<span class="tt-menu__check">${ttIcon('check', { size: 16, strokeWidth: 2.4 })}</span>`;
+
+  function outside(event) {
+    const actions = root.querySelector('.tt-bh__actions');
+    if (st.open === 'sort' && actions && !actions.contains(event.target)) close();
+  }
+  function close() {
+    st.open = null;
+    document.removeEventListener('click', outside, true);
+    document.body.classList.remove('sheet-open');
+    layer.remove();
+    render();
+  }
+
+  function renderSheet() {
+    const scrim = el('div', 'tt-scrim');
+    scrim.addEventListener('click', close);
+    const sheet = el('div', 'tt-sheet tt-sheet--bottom');
+    sheet.setAttribute('role', 'dialog');
+    sheet.setAttribute('aria-label', 'Filters');
+    sheet.appendChild(el('span', 'tt-sheet__handle'));
+    const head = el('div', 'tt-sheet__head');
+    head.appendChild(el('span', 'tt-sheet__title', 'Filters'));
+    const clear = el('button', 'tt-link', 'Clear all');
+    clear.type = 'button';
+    clear.addEventListener('click', () => {
+      st.sections.forEach(sec => { st.draft[sec.id] = defaultFor(sec); });
+      render();
+    });
+    head.appendChild(clear);
+    sheet.appendChild(head);
+
+    const body = el('div', 'tt-sheet__body');
+    st.sections.forEach(sec => {
+      const v = st.draft[sec.id];
+      const section = el('div', 'tt-sheet__section');
+      section.appendChild(el('span', 'tt-filter-label', sec.label));
+      const multi = sec.kind === 'multi';
+      const group = el('div', multi ? 'tt-sheet__checks' : 'tt-seg');
+      group.setAttribute('role', 'group');
+      group.setAttribute('aria-label', sec.label);
+      sec.options.forEach(o => {
+        const on = multi ? (v || []).includes(o.id) : v === o.id;
+        const cls = multi ? `tt-menu__item${on ? ' tt-menu__item--on' : ''}` : `tt-seg__item${on ? ' tt-seg__item--on' : ''}`;
+        const b = el('button', cls, o.label);
+        b.type = 'button';
+        if (multi) {
+          b.setAttribute('role', 'checkbox');
+          b.setAttribute('aria-checked', on ? 'true' : 'false');
+          b.insertAdjacentHTML('beforeend', checkMark());
+        } else {
+          b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        }
+        b.addEventListener('click', () => {
+          st.draft[sec.id] = multi ? (on ? v.filter(x => x !== o.id) : [...(v || []), o.id]) : o.id;
+          render();
+        });
+        group.appendChild(b);
+      });
+      section.appendChild(group);
+      body.appendChild(section);
+    });
+    sheet.appendChild(body);
+
+    const apply = el('button', 'tt-btn tt-btn--primary', 'Show results');
+    apply.type = 'button';
+    apply.addEventListener('click', () => {
+      st.values = { ...st.draft };
+      close();
+      emit();
+    });
+    sheet.appendChild(apply);
+    return [scrim, sheet];
+  }
+
+  function render() {
+    const scroll = layer.querySelector('.tt-sheet__body');
+    const scrollTop = scroll ? scroll.scrollTop : 0;
+    root.innerHTML = '';
+    const row = el('div', 'tt-bh__row');
+    const text = el('div', 'tt-bh__text');
+    if (st.title) text.appendChild(el(st.level === 1 ? 'h1' : 'h2', 'tt-bh__title', st.title));
+    const parts = [];
+    const sortOpt = st.sortOptions.find(o => o.id === st.sort);
+    if (sortOpt) parts.push(sortOpt.summary || sortOpt.label);
+    st.sections.forEach(sec => {
+      const v = st.values[sec.id];
+      if (sec.kind === 'multi') { if ((v || []).length) parts.push(v.map(id => labelOf(sec, id)).join(', ')); }
+      else if (isActive(sec, v)) parts.push(labelOf(sec, v));
+    });
+    // With no sort and nothing filtered, name the default choice ("All") rather than nothing.
+    if (!parts.length && st.sections[0]) parts.push(labelOf(st.sections[0], st.values[st.sections[0].id]));
+    text.appendChild(el('span', 'tt-bh__summary', st.summary || parts.join(' · ')));
+    row.appendChild(text);
+
+    const actions = el('div', 'tt-bh__actions');
+    if (st.sortOptions.length) {
+      const sortBtn = el('button', `tt-iconbtn${st.open === 'sort' ? ' tt-iconbtn--open' : ''}`);
+      sortBtn.type = 'button';
+      sortBtn.setAttribute('aria-label', `Sort: ${sortOpt ? sortOpt.label : ''}`);
+      sortBtn.setAttribute('aria-haspopup', 'menu');
+      sortBtn.setAttribute('aria-expanded', st.open === 'sort' ? 'true' : 'false');
+      sortBtn.innerHTML = ttIcon('sort', { size: 18 });
+      sortBtn.addEventListener('click', () => {
+        if (st.open === 'sort') { close(); return; }
+        st.open = 'sort';
+        render();
+        document.addEventListener('click', outside, true);
+      });
+      actions.appendChild(sortBtn);
+    }
+    const activeCount = st.sections.reduce((n, sec) => {
+      const v = st.values[sec.id];
+      return n + (sec.kind === 'multi' ? (v || []).length : (isActive(sec, v) ? 1 : 0));
+    }, 0);
+    if (st.sections.length) {
+      const filterBtn = el('button', 'tt-iconbtn');
+      filterBtn.type = 'button';
+      filterBtn.setAttribute('aria-label', activeCount ? `Filters, ${activeCount} active` : 'Filters');
+      filterBtn.setAttribute('aria-haspopup', 'dialog');
+      filterBtn.setAttribute('aria-expanded', st.open === 'sheet' ? 'true' : 'false');
+      filterBtn.innerHTML = ttIcon('sliders', { size: 18 });
+      if (activeCount) filterBtn.appendChild(el('span', 'tt-iconbtn__dot'));
+      filterBtn.addEventListener('click', () => {
+        st.draft = JSON.parse(JSON.stringify(st.values));
+        st.open = 'sheet';
+        document.body.classList.add('sheet-open');
+        render();
+      });
+      actions.appendChild(filterBtn);
+    }
+    if (st.open === 'sort') {
+      const menu = el('div', 'tt-menu');
+      menu.setAttribute('role', 'menu');
+      st.sortOptions.forEach(o => {
+        const on = o.id === st.sort;
+        const item = el('button', `tt-menu__item${on ? ' tt-menu__item--on' : ''}`, o.label);
+        item.type = 'button';
+        item.setAttribute('role', 'menuitemradio');
+        item.setAttribute('aria-checked', on ? 'true' : 'false');
+        item.insertAdjacentHTML('beforeend', checkMark());
+        item.addEventListener('click', () => {
+          st.sort = o.id;
+          close();
+          emit();
+        });
+        menu.appendChild(item);
+      });
+      actions.appendChild(menu);
+    }
+    row.appendChild(actions);
+    root.appendChild(row);
+    layer.innerHTML = '';
+    if (st.open === 'sheet') {
+      renderSheet().forEach(n => layer.appendChild(n));
+      if (!layer.isConnected) document.body.appendChild(layer);
+      const body = layer.querySelector('.tt-sheet__body');
+      if (body) body.scrollTop = scrollTop;
+    }
+  }
+
+  render();
+  return {
+    el: root,
+    update(next = {}) {
+      ['title', 'sortOptions', 'summary'].forEach(k => { if (k in next) st[k] = next[k]; });
+      if ('sort' in next) st.sort = next.sort;
+      if ('sections' in next) {
+        st.sections = next.sections;
+        setValues(next.values || st.values);
+      } else if ('values' in next) {
+        setValues(next.values);
+      }
+      if (st.draft) st.sections.forEach(sec => { if (!(sec.id in st.draft)) st.draft[sec.id] = defaultFor(sec); });
+      render();
+    },
+    get state() { return { sort: st.sort, values: { ...st.values } }; },
+  };
 }
 
 // A compact row: thumbnail, title, meta line, optional progress. Used for search results and
@@ -906,15 +1178,10 @@ function confirmDialog({ title = null, message, confirmLabel = 'OK', cancelLabel
 function promptDialog({ title, label, placeholder = '', confirmLabel = 'Save', value = '' }) {
   return new Promise(resolve => {
     const { overlay, modal } = openDialog();
-    const form = el('form', 'auth-form');
+    const form = el('form', 'dialog-form');
     form.appendChild(el('h2', null, title));
-    const field = el('label', 'field', label);
-    const input = el('input', 'text-input');
-    input.type = 'text';
-    input.placeholder = placeholder;
-    input.value = value;
-    input.required = true;
-    field.appendChild(input);
+    const field = buildTextField({ label, placeholder, value, required: true });
+    const { input } = field;
     form.appendChild(field);
     const actions = el('div', 'confirm-actions');
     const close = result => { overlay.remove(); resolve(result); };

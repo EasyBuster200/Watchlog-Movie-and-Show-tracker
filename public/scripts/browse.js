@@ -1,13 +1,13 @@
-// "Browse All" on the Movies and Shows pages: a collapsible Filter & sort card (sort chips and
-// genre chips), then a three-column grid of TMDB's discover results with Prev/Next paging.
-// Titles already watched are left out (`excludeIds()` returns their TMDB ids).
+// "Browse All" on the Movies and Shows pages: a BrowseHeader ("Browse All Movies", a summary
+// line, a sort menu and a genre filter sheet), then a three-column grid of TMDB's discover
+// results with Prev/Next paging. Titles already watched are left out (`excludeIds()` returns
+// their TMDB ids).
 
 const BROWSE_SORTS = [
   { id: 'popular', label: 'Popular' },
   { id: 'rated', label: 'Top rated' },
   { id: 'newest', label: 'Newest' },
 ];
-const BROWSE_COLLAPSED_GENRES = 8;
 
 function browseSortParams(sort, mediaType) {
   const today = new Date().toISOString().slice(0, 10);
@@ -18,64 +18,26 @@ function browseSortParams(sort, mediaType) {
 }
 
 function initBrowse({ mediaType, context, excludeIds = () => new Set() }) {
-  const state = { sort: 'popular', genres: [], picked: new Set(), expanded: false, open: false, page: 1 };
+  const state = { sort: 'popular', picked: [], page: 1 };
 
-  const toggle = document.getElementById('filter-toggle');
-  const panel = document.getElementById('filter-panel');
-  const summaryEl = document.getElementById('filter-summary');
-  const badgeEl = document.getElementById('filter-badge');
-  const sortsEl = document.getElementById('filter-sorts');
-  const genresEl = document.getElementById('filter-genres');
-  const clearBtn = document.getElementById('filter-clear');
-  const resultLabel = document.getElementById('browse-result-label');
   const emptyEl = document.getElementById('browse-empty');
   const grid = document.getElementById('browse-grid');
   const pager = document.getElementById('browse-pagination');
 
-  const sortLabel = () => BROWSE_SORTS.find(s => s.id === state.sort).label;
-  const pickedNames = () => state.genres.filter(g => state.picked.has(g.id)).map(g => g.name);
-
-  function renderControls() {
-    const names = pickedNames();
-    toggle.setAttribute('aria-expanded', state.open ? 'true' : 'false');
-    panel.hidden = !state.open;
-    summaryEl.textContent = `${sortLabel()} · ${names.length ? `${names.length} genre${names.length === 1 ? '' : 's'}` : 'All genres'}`;
-    badgeEl.hidden = names.length === 0;
-    badgeEl.textContent = names.length;
-    clearBtn.hidden = names.length === 0;
-    clearBtn.textContent = `Clear (${names.length})`;
-    resultLabel.textContent = `${names.length ? names.join(', ') : 'All genres'} · ${sortLabel()}`;
-
-    sortsEl.innerHTML = '';
-    BROWSE_SORTS.forEach(s => sortsEl.appendChild(buildChip(s.label, {
-      selected: state.sort === s.id,
-      onClick: () => { state.sort = s.id; state.page = 1; renderControls(); loadPage(); },
-    })));
-
-    genresEl.innerHTML = '';
-    const shown = state.expanded
-      ? state.genres
-      : state.genres.filter((g, i) => i < BROWSE_COLLAPSED_GENRES || state.picked.has(g.id));
-    shown.forEach(g => genresEl.appendChild(buildChip(g.name, {
-      selected: state.picked.has(g.id),
-      check: true,
-      onClick: () => {
-        if (state.picked.has(g.id)) state.picked.delete(g.id);
-        else state.picked.add(g.id);
-        state.page = 1;
-        renderControls();
-        loadPage();
-      },
-    })));
-    const hidden = state.genres.length - shown.length;
-    if (state.expanded || hidden > 0) {
-      const more = el('button', 'tt-chip tt-chip--ghost', state.expanded ? 'Show less' : `+${hidden} more`);
-      more.type = 'button';
-      more.setAttribute('aria-expanded', state.expanded ? 'true' : 'false');
-      more.addEventListener('click', () => { state.expanded = !state.expanded; renderControls(); });
-      genresEl.appendChild(more);
-    }
-  }
+  // Genres are a "multi" section: any picked genre matches. The section is added once TMDB's
+  // genre list has loaded.
+  const header = createBrowseHeader({
+    title: `Browse All ${mediaType === 'movie' ? 'Movies' : 'Shows'}`,
+    sortOptions: BROWSE_SORTS,
+    sort: state.sort,
+    onChange: ({ sort, values }) => {
+      state.sort = sort;
+      state.picked = values.genres || [];
+      state.page = 1;
+      loadPage();
+    },
+  });
+  document.getElementById('browse-header').appendChild(header.el);
 
   async function loadPage() {
     const params = new URLSearchParams({
@@ -85,7 +47,7 @@ function initBrowse({ mediaType, context, excludeIds = () => new Set() }) {
       ...browseSortParams(state.sort, mediaType),
     });
     // Any of the picked genres (TMDB: "|" is OR).
-    if (state.picked.size) params.set('with_genres', [...state.picked].join('|'));
+    if (state.picked.length) params.set('with_genres', state.picked.join('|'));
 
     emptyEl.hidden = true;
     grid.innerHTML = '';
@@ -114,13 +76,11 @@ function initBrowse({ mediaType, context, excludeIds = () => new Set() }) {
     }
   }
 
-  toggle.addEventListener('click', () => { state.open = !state.open; renderControls(); });
-  clearBtn.addEventListener('click', () => { state.picked.clear(); state.page = 1; renderControls(); loadPage(); });
-
   fetchJson(`/api/tmdb/genre/${mediaType}/list`)
-    .then(data => { state.genres = data.genres || []; renderControls(); })
+    .then(data => header.update({
+      sections: [{ id: 'genres', label: 'Genres', kind: 'multi', options: (data.genres || []).map(g => ({ id: g.id, label: g.name })) }],
+    }))
     .catch(error => console.error('Failed to load genres:', error));
 
-  renderControls();
   loadPage();
 }

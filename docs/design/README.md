@@ -36,17 +36,27 @@ Seven accent palettes are available, each with six tokens and a value per theme:
 
 Components never use a palette directly: they read `accent`, `accent-hover`, `accent-text`, `accent-subtle`, `on-accent` and `accent-mark`, which point at the active palette (burgundy). To switch the whole app to another accent, repoint those six tokens (e.g. `accent` → `{teal}`, `accent-mark` → `{teal-mark}`). Avoid `amber` if star ratings matter on a screen: it sits close to `rating`.
 
+## Browser layout
+
+At desktop widths the app uses `SideNav` instead of `BottomNav`: a left sidebar with the wordmark, search, the same six sections and the profile/settings at the foot. Content sits to its right with 32–40px padding, and rows of posters become wrapping grids (`repeat(auto-fill, minmax(150px, 1fr))`). Detail pages put the main content and a side column (cast, details) next to each other, stacking below 900px. The sidebar stacks above the content on narrow windows.
+
 ## Filters
 
 Filtering and sorting never take a row of their own. Every browsable list starts with `BrowseHeader`: a title and a one-line summary of what is applied, with a sort icon (opens a small menu) and a filter icon (opens a sheet with segmented choices and a genre checklist; a `accent-mark` dot marks active filters). In the app the sheet slides up from the bottom; on design frames taller than a phone use `placement="anchored"` so it drops below the header. `Chip` stays for in-place choices that are not filters (Settings theme).
 
+## Sign-in and forms
+
+The app opens on **Who's watching?**: a card list of profiles (avatar, name, and a meta line with a `cloud` icon for synced accounts or a `lock` icon for offline ones, plus Edit and a `danger` Delete), then Sign in (primary) and two secondary buttons side by side: Offline profile and Import backup. An offline profile needs only a display name and a TMDB API Read Access Token (a password-type `TextField` with show/hide); it stays on the device and never syncs. Import backup takes the .json from Settings → Export data or Auto-backup, shows what's in it, then restores it as an offline profile or into a signed-in account.
+
+Auth screens are a single centred column, max 400px: the Watchlog mark, a title and one line of context, `TextField`s, then one full-width primary `Button`. Secondary routes are text links in `accent-text`. Every auth screen ends with the TMDB credit: "This app uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB." plus the TMDB key line and TMDB's official logo (use the file from TMDB; never redraw it). In the browser, the form sits on the right of a split layout with a poster mosaic on the left.
+
 ## Iconography
 
-Line icons, 24px grid, 1.8px stroke, round caps and joins, no fills. Inactive icons use `text-muted`; the active one uses `accent-mark`. The set (exported as `Icon`): home, bookmark, folder, film, tv, user, eye, heart, search, back, check, star, chevron, play, more, cloud, close, plus, sort, sliders, down. The current app's icon source wasn't available, so these are drawn to match its look; swap in the real files when you have them.
+Line icons, 24px grid, 1.8px stroke, round caps and joins, no fills. Inactive icons use `text-muted`; the active one uses `accent-mark`. The set (exported as `Icon`): home, bookmark, folder, film, tv, user, eye, heart, search, back, check, star, chevron, play, more, cloud, close, plus, sort, sliders, down, eyeoff, mail, lock. The current app's icon source wasn't available, so these are drawn to match its look; swap in the real files when you have them.
 
 ## Components
 
-`Icon`, `Button`, `BackButton`, `SearchField`, `SectionHeader`, `PosterArt`, `PosterCard`, `MediaRow`, `AiringRow`, `CastCard`, `Chip`, `Switch`, `BrowseHeader`, `ProgressBar`, `SeasonRow`, `EpisodeCard`, `StatTile`, `BottomNav`. Each reads only tokens, so restyling the tokens restyles the app. Every show or movie artwork, at any size, is `PosterArt` (inside `PosterCard`, `MediaRow` and the show header), so posters look the same everywhere. Every screen below the top level uses `BackButton` at its top-left. Pass real poster/still URLs through `image`; without one, cards show a `bg-raised` placeholder with the title's initials.
+`Icon`, `Button`, `BackButton`, `SearchField`, `SectionHeader`, `PosterArt`, `PosterCard`, `MediaRow`, `AiringRow`, `CastCard`, `Chip`, `Switch`, `TextField`, `BrowseHeader`, `ProgressBar`, `SeasonRow`, `EpisodeCard`, `StatTile`, `BottomNav`, `SideNav`. Each reads only tokens, so restyling the tokens restyles the app. Every show or movie artwork, at any size, is `PosterArt` (inside `PosterCard`, `MediaRow` and the show header), so posters look the same everywhere. Every screen below the top level uses `BackButton` at its top-left. Pass real poster/still URLs through `image`; without one, cards show a `bg-raised` placeholder with the title's initials.
 
 ## What's not here yet
 

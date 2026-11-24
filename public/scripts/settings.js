@@ -33,22 +33,17 @@ function renderProfileCard() {
 // before it's saved.
 function openProfileDialog({ focusToken = false } = {}) {
   const { overlay, modal } = openDialog();
-  const form = el('form', 'auth-form');
+  const form = el('form', 'dialog-form');
   form.appendChild(el('h2', null, 'Edit profile'));
 
-  const nameField = el('label', 'field', 'Display name');
-  const nameInput = el('input', 'text-input');
-  nameInput.value = user.displayName;
-  nameInput.required = true;
-  nameField.appendChild(nameInput);
-
-  const tokenField = el('label', 'field', 'TMDB API Read Access Token');
-  const tokenInput = el('input', 'text-input');
-  tokenInput.value = user.tmdbApiKey;
-  tokenInput.required = true;
-  tokenInput.autocomplete = 'off';
+  const nameField = buildTextField({ label: 'Display name', icon: 'user', value: user.displayName, required: true, maxLength: 40 });
+  const nameInput = nameField.input;
+  const tokenField = buildTextField({
+    label: 'TMDB API Read Access Token', type: 'password', icon: 'lock', value: user.tmdbApiKey, required: true,
+    autocomplete: 'off', helper: 'The long token on themoviedb.org → Settings → API',
+  });
+  const tokenInput = tokenField.input;
   tokenInput.spellcheck = false;
-  tokenField.appendChild(tokenInput);
 
   const error = el('p', 'auth-error');
   error.hidden = true;

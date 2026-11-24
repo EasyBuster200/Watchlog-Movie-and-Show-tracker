@@ -20,50 +20,23 @@
   <script type="text/javascript" src="scripts/vendor/capacitor-local-notifications.js"></script>
   <script type="text/javascript" src="scripts/localDb.js" defer></script>
   <script type="text/javascript" src="scripts/profiles.js" defer></script>
+  <script type="text/javascript" src="scripts/media.js" defer></script>
   <script type="text/javascript" src="scripts/notifications.js" defer></script>
   <script type="text/javascript" src="scripts/backup.js" defer></script>
   <script type="text/javascript" src="scripts/profile-picker.js" defer></script>
 </head>
 <body>
-  <main class="picker">
-    <div class="picker__card">
-      <div class="picker__brand">
-        <h1 class="picker__logo">Watchlog</h1>
-        <p class="picker__tagline">Who's watching?</p>
-      </div>
-
-      <div id="profile-list" class="profile-list"></div>
-      <p id="profile-empty" class="profile-empty" hidden>No profiles yet. Create one to get started.</p>
-
-      <div class="picker__actions">
-        <button id="new-profile-btn" type="button" class="tt-btn tt-btn--primary">
-          <svg class="tt-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
-          New profile
-        </button>
-        <button id="import-backup-btn" type="button" class="tt-btn tt-btn--secondary">Import backup</button>
-      </div>
-      <input type="file" id="import-backup-input" accept="application/json" hidden>
-
-      <form id="profile-form" class="auth-form" hidden>
-        <input type="hidden" name="editingId">
-        <label class="field">Display name<input type="text" name="displayName" class="text-input" required></label>
-        <p id="profile-form-hint" class="profile-form-hint" hidden></p>
-        <label class="field">TMDB API Read Access Token<input type="text" name="tmdbApiKey" class="text-input" required autocomplete="off" spellcheck="false" placeholder="The long token from themoviedb.org/settings/api"></label>
-        <div class="picker__actions">
-          <button type="button" id="profile-form-cancel" class="tt-btn tt-btn--secondary">Cancel</button>
-          <button type="submit" id="profile-form-submit" class="tt-btn tt-btn--primary">Create profile</button>
-        </div>
-      </form>
-
-      <p id="profile-error" class="auth-error" hidden></p>
-
-      <div class="tmdb-attribution">
-        <a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer">
-          <img src="images/tmdb-logo.svg" alt="TMDB">
-        </a>
-        <p>This app uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB. Each profile uses its own TMDB API key, entered above. Get a free one at themoviedb.org.</p>
-      </div>
-    </div>
+  <!-- Every screen (Who's watching?, the offline profile form, Import a backup, and the online
+       account screens) is drawn into #auth by profile-picker.js; the TMDB credit stays below. -->
+  <main class="auth">
+    <div class="auth__col" id="auth"></div>
+    <footer class="auth__credit">
+      <a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer">
+        <img src="images/tmdb-logo.svg" alt="TMDB">
+      </a>
+      <p>This app uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB. Each profile uses its own TMDB API key. Get a free one at <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener noreferrer">themoviedb.org</a>.</p>
+    </footer>
+    <input type="file" id="import-backup-input" accept="application/json,.json" hidden>
   </main>
 </body>
 </html>

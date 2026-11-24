@@ -122,6 +122,26 @@ export interface SwitchProps {
 }
 export declare function Switch(props: SwitchProps): React.ReactElement;
 
+export interface TextFieldProps {
+  label: string;
+  type?: 'text' | 'email' | 'password';
+  placeholder?: string;
+  defaultValue?: string;
+  value?: string;
+  onChange?: (value: string) => void;
+  /** Leading icon name, e.g. 'mail' or 'lock'. */
+  icon?: string;
+  helper?: string;
+  error?: string;
+  /** Element shown to the right of the label, e.g. a "Forgot password?" link. */
+  aside?: React.ReactNode;
+  autoComplete?: string;
+  name?: string;
+  id?: string;
+}
+/** Labelled 48px input. Password fields get a show/hide toggle. Focus uses accent-mark; errors use danger. */
+export declare function TextField(props: TextFieldProps): React.ReactElement;
+
 export interface BrowseSection {
   id: string;
   label: string;
@@ -208,10 +228,22 @@ export interface StatTileProps {
 }
 export declare function StatTile(props: StatTileProps): React.ReactElement;
 
+export interface SideNavProps {
+  /** Active section. */
+  active?: "home" | "watchlist" | "lists" | "movies" | "shows" | "profile";
+  /** Links per section id (plus "settings"); items without one render as plain labels. */
+  hrefs?: Partial<Record<"home" | "watchlist" | "lists" | "movies" | "shows" | "profile" | "settings", string>>;
+  /** Wordmark next to the logo tile; default "Watchlog". */
+  brand?: string;
+  userName?: string;
+}
+/** Browser layout: left sidebar replacing BottomNav at desktop widths. */
+export declare function SideNav(props: SideNavProps): React.ReactElement;
+
 export interface BottomNavProps {
   active?: "home" | "watchlist" | "lists" | "movies" | "shows" | "profile";
   onChange?: (id: string) => void;
 }
 export declare function BottomNav(props: BottomNavProps): React.ReactElement;
 
-declare global { interface Window { TVTracker: { Icon: typeof Icon; Button: typeof Button; SearchField: typeof SearchField; SectionHeader: typeof SectionHeader; BackButton: typeof BackButton; PosterArt: typeof PosterArt; PosterCard: typeof PosterCard; MediaRow: typeof MediaRow; AiringRow: typeof AiringRow; CastCard: typeof CastCard; Chip: typeof Chip; Switch: typeof Switch; BrowseHeader: typeof BrowseHeader; ProgressBar: typeof ProgressBar; SeasonRow: typeof SeasonRow; EpisodeCard: typeof EpisodeCard; StatTile: typeof StatTile; BottomNav: typeof BottomNav } } }
+declare global { interface Window { TVTracker: { Icon: typeof Icon; Button: typeof Button; SearchField: typeof SearchField; SectionHeader: typeof SectionHeader; BackButton: typeof BackButton; PosterArt: typeof PosterArt; PosterCard: typeof PosterCard; MediaRow: typeof MediaRow; AiringRow: typeof AiringRow; CastCard: typeof CastCard; Chip: typeof Chip; Switch: typeof Switch; TextField: typeof TextField; BrowseHeader: typeof BrowseHeader; ProgressBar: typeof ProgressBar; SeasonRow: typeof SeasonRow; EpisodeCard: typeof EpisodeCard; StatTile: typeof StatTile; BottomNav: typeof BottomNav; SideNav: typeof SideNav } } }

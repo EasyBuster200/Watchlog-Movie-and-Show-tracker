@@ -1,4 +1,4 @@
-/* @ds-bundle: {"format":4,"namespace":"TVTracker","components":[{"name":"Icon"},{"name":"Button"},{"name":"SearchField"},{"name":"SectionHeader"},{"name":"BackButton"},{"name":"PosterArt"},{"name":"PosterCard"},{"name":"MediaRow"},{"name":"AiringRow"},{"name":"CastCard"},{"name":"Chip"},{"name":"Switch"},{"name":"BrowseHeader"},{"name":"ProgressBar"},{"name":"SeasonRow"},{"name":"EpisodeCard"},{"name":"StatTile"},{"name":"BottomNav"}]} */
+/* @ds-bundle: {"format":4,"namespace":"TVTracker","components":[{"name":"Icon"},{"name":"Button"},{"name":"SearchField"},{"name":"SectionHeader"},{"name":"BackButton"},{"name":"PosterArt"},{"name":"PosterCard"},{"name":"MediaRow"},{"name":"AiringRow"},{"name":"CastCard"},{"name":"Chip"},{"name":"Switch"},{"name":"TextField"},{"name":"BrowseHeader"},{"name":"ProgressBar"},{"name":"SeasonRow"},{"name":"EpisodeCard"},{"name":"StatTile"},{"name":"BottomNav"},{"name":"SideNav"}]} */
 (function () {
   var React = window.React;
   var h = React.createElement;
@@ -22,6 +22,9 @@
     sliders: ['M4 7h10', 'M18 7h2', 'M16 5v4', 'M4 17h4', 'M12 17h8', 'M10 15v4'],
     down: ['M6 9l6 6 6-6'],
     close: ['M6 6l12 12', 'M18 6L6 18'],
+    eyeoff: ['M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M4 4l16 16'],
+    mail: ['M3.5 6h17v12h-17z', 'M3.5 7l8.5 6.5L20.5 7'],
+    lock: ['M5.5 11h13v9.5h-13z', 'M8.5 11V8a3.5 3.5 0 0 1 7 0v3'],
     plus: ['M12 5v14', 'M5 12h14'],
     more: ['M10.5 12a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0z', 'M3.5 12a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0z', 'M17.5 12a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0z'],
     cloud: ['M7 18.5h10.5a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.6 9.1 4.75 4.75 0 0 0 7 18.5z', 'M9.5 13.5l2 2 3.5-3.5']
@@ -175,6 +178,35 @@
       className: cx('tt-switch', on && 'tt-switch--on'),
       onClick: function () { _s[1](!on); if (props.onChange) props.onChange(!on); }
     }, h('span', { className: 'tt-switch__knob', 'aria-hidden': 'true' }));
+  }
+
+  var _tfId = 0;
+  function TextField(props) {
+    var _id = React.useState(function () { _tfId += 1; return 'tt-field-' + _tfId; })[0];
+    var id = props.id || _id;
+    var isPw = props.type === 'password';
+    var _show = React.useState(false);
+    var _v = React.useState(props.defaultValue || '');
+    var value = props.value != null ? props.value : _v[0];
+    var hint = props.error || props.helper;
+    return h('div', { className: cx('tt-field', props.error && 'tt-field--error') },
+      h('div', { className: 'tt-field__top' },
+        h('label', { className: 'tt-field__label', htmlFor: id }, props.label),
+        props.aside || null),
+      h('div', { className: 'tt-field__box' },
+        props.icon ? h(Icon, { name: props.icon, size: 18 }) : null,
+        h('input', {
+          id: id, type: isPw && _show[0] ? 'text' : (props.type || 'text'), value: value,
+          placeholder: props.placeholder, autoComplete: props.autoComplete, name: props.name,
+          'aria-invalid': props.error ? 'true' : undefined, 'aria-describedby': hint ? id + '-hint' : undefined,
+          onChange: function (e) { _v[1](e.target.value); if (props.onChange) props.onChange(e.target.value); }
+        }),
+        isPw ? h('button', {
+          type: 'button', className: 'tt-field__reveal', 'aria-label': _show[0] ? 'Hide password' : 'Show password',
+          'aria-pressed': _show[0], onClick: function () { _show[1](!_show[0]); }
+        }, h(Icon, { name: _show[0] ? 'eyeoff' : 'eye', size: 18 })) : null),
+      hint ? h('span', { className: 'tt-field__hint', id: id + '-hint' }, props.error || props.helper) : null
+    );
   }
 
   function sectionDefault(sec) { return sec.kind === 'multi' ? [] : sec.options[0]; }
@@ -386,9 +418,34 @@
     );
   }
 
+  function SideNav(props) {
+    var active = props.active || 'home';
+    var hrefs = props.hrefs || {};
+    var item = function (it) {
+      var on = it.id === active;
+      return h(hrefs[it.id] ? 'a' : 'span', {
+        key: it.id, href: hrefs[it.id], className: cx('tt-sidenav__item', on && 'tt-sidenav__item--on'),
+        'aria-current': on ? 'page' : undefined
+      }, h(Icon, { name: it.icon, size: 20, strokeWidth: on ? 2 : 1.8 }), it.label);
+    };
+    return h('nav', { className: 'tt-sidenav', 'aria-label': 'Main' },
+      h('span', { className: 'tt-sidenav__brand' },
+        h('span', { className: 'tt-sidenav__mark', 'aria-hidden': 'true' }, h(Icon, { name: 'play', size: 14, filled: true })),
+        props.brand || 'Watchlog'),
+      h(SearchField, { placeholder: 'Search movies and shows…' }),
+      h('div', { className: 'tt-sidenav__items' }, NAV.map(item)),
+      h('div', { className: 'tt-sidenav__foot' },
+        h(hrefs.profile ? 'a' : 'span', { className: 'tt-sidenav__me', href: hrefs.profile },
+          h('span', { className: 'tt-sidenav__avatar', 'aria-hidden': 'true' }, (props.userName || 'D').charAt(0)),
+          h('span', null, props.userName || 'Duarte')),
+        hrefs.settings ? h('a', { className: 'tt-btn tt-btn--ghost tt-btn--icon', href: hrefs.settings, 'aria-label': 'Settings', style: { color: 'var(--text-secondary)' } }, h(Icon, { name: 'more', size: 20 })) : null
+      )
+    );
+  }
+
   window.TVTracker = {
     Icon: Icon, Button: Button, SearchField: SearchField, SectionHeader: SectionHeader,
-    BackButton: BackButton, PosterArt: PosterArt, PosterCard: PosterCard, MediaRow: MediaRow, AiringRow: AiringRow, CastCard: CastCard, Chip: Chip, Switch: Switch, BrowseHeader: BrowseHeader, ProgressBar: ProgressBar, SeasonRow: SeasonRow,
-    EpisodeCard: EpisodeCard, StatTile: StatTile, BottomNav: BottomNav
+    BackButton: BackButton, PosterArt: PosterArt, PosterCard: PosterCard, MediaRow: MediaRow, AiringRow: AiringRow, CastCard: CastCard, Chip: Chip, Switch: Switch, TextField: TextField, BrowseHeader: BrowseHeader, ProgressBar: ProgressBar, SeasonRow: SeasonRow,
+    EpisodeCard: EpisodeCard, StatTile: StatTile, BottomNav: BottomNav, SideNav: SideNav
   };
 })();

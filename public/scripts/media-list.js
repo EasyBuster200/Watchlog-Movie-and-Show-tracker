@@ -5,7 +5,8 @@
 //                                           remove ×, a tile to add titles, and a Delete menu.
 //   trending / popular / upcoming / recommended (&type=), similar (&type=&id=)
 //                                         - TMDB feeds, paged with Prev/Next.
-// Local sources can be sorted: Recently added / A–Z / Rating.
+// Local sources can be sorted: Recently added / A–Z / Rating, from a BrowseHeader under the title
+// (sort menu; watched shows also get a Status filter in its sheet).
 
 const LOCAL_ENDPOINTS = {
   'watched:movie': '/api/watched/movies/details',
@@ -88,29 +89,31 @@ function sortedItems(state) {
   return items;
 }
 
-function renderChipRow(rowEl, options, selectedKey, onPick) {
-  rowEl.innerHTML = '';
-  rowEl.hidden = false;
-  options.forEach(o => rowEl.appendChild(buildChip(o.label, { selected: o.key === selectedKey, onClick: () => onPick(o.key) })));
-}
-
 function renderControls(state, context) {
   if (isFeed(state)) return;
-  renderChipRow(document.getElementById('media-list-sorts'), SORTS, state.sort, key => {
-    state.sort = key;
-    renderControls(state, context);
-    renderGrid(state, context);
-  });
-  if (isShowList(state)) {
-    renderChipRow(document.getElementById('media-list-filters'), SHOW_FILTERS, state.filter, key => {
-      state.filter = key;
-      const url = new URL(window.location.href);
-      url.searchParams.set('filter', key);
-      window.history.replaceState(null, '', url);
-      renderControls(state, context);
+  const controls = document.getElementById('media-list-controls');
+  const sections = isShowList(state)
+    ? [{ id: 'status', label: 'Status', kind: 'single', options: SHOW_FILTERS.map(f => ({ id: f.key, label: f.label })) }]
+    : [];
+  const header = createBrowseHeader({
+    sortOptions: SORTS.map(s => ({ id: s.key, label: s.label })),
+    sort: state.sort,
+    sections,
+    values: { status: state.filter },
+    onChange: ({ sort, values }) => {
+      state.sort = sort;
+      if (isShowList(state) && values.status !== state.filter) {
+        state.filter = values.status;
+        const url = new URL(window.location.href);
+        url.searchParams.set('filter', state.filter);
+        window.history.replaceState(null, '', url);
+      }
       renderGrid(state, context);
-    });
-  }
+    },
+  });
+  controls.innerHTML = '';
+  controls.appendChild(header.el);
+  controls.hidden = false;
 }
 
 function setCount(n) {
