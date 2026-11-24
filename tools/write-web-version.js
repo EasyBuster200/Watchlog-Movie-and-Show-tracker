@@ -22,11 +22,15 @@ function commitCount() {
   }
 }
 
-let commit = process.env.WORKERS_CI_COMMIT_SHA || process.env.CF_PAGES_COMMIT_SHA || null;
+// The build checks out the commit being deployed, so git knows its id. Cloudflare's own
+// environment variables are only a fallback, and only when they hold a real commit id (a
+// Workers build's variable turned out to hold the branch name).
+const isCommitId = value => /^[0-9a-f]{7,40}$/i.test(value || '');
+let commit = null;
 try {
-  commit = commit || git('rev-parse HEAD');
+  commit = git('rev-parse HEAD');
 } catch (error) {
-  // Not a git checkout: leave the commit out.
+  commit = [process.env.WORKERS_CI_COMMIT_SHA, process.env.CF_PAGES_COMMIT_SHA].find(isCommitId) || null;
 }
 
 const count = commitCount();

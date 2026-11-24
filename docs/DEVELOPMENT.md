@@ -133,8 +133,8 @@ is how Watchlog runs on an iPhone without the App Store: open the site in Safari
   records when each profile last exported. The Profile page shows a reminder when there's never
   been an export or the last one is 7+ days old.
 - **Version:** `tools/write-web-version.js` writes `public/version.json` (`2.<commit count>`, the
-  same numbering as the APK) during the deploy, and Settings shows it. It's not committed;
-  without it Settings says "web preview".
+  same numbering as the APK, plus the commit id from git) during the deploy, and Settings shows
+  it. It's not committed; without it Settings says "web preview".
 - **Notifications** aren't available on the web yet (see the roadmap).
 
 ### Hosting on Cloudflare
@@ -154,7 +154,7 @@ pick this repository, then:
 | Deploy command | `npx wrangler deploy` |
 | Preview builds | On |
 
-Every push to `main` then deploys the site at `https://watchlog.<your-subdomain>.workers.dev`,
+Every push to `main` then deploys the site, live at **https://watchlog.duartecruzcoelho.workers.dev**,
 and every other branch gets its own preview address (shown on its pull request), which can be
 opened on a phone to try a change before merging. Wrangler isn't a dependency of this
 repository: Cloudflare's build runs it with `npx` (it needs a newer Node than the Node 18 the
