@@ -1,0 +1,12 @@
+// Cloudflare Workers config for the web app: serves public/ as static files, no server code
+// (yet; the accounts/sync API in docs/ROADMAP.md will be added to this same Worker).
+// Cloudflare's Git integration runs the build command `node tools/write-web-version.js`, then
+// `npx wrangler deploy` for main and a preview upload for other branches.
+// See docs/DEVELOPMENT.md, "Hosting on Cloudflare".
+{
+  "name": "watchlog",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./public"
+  }
+}

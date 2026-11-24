@@ -1,4 +1,4 @@
-// Writes public/version.json for the web deploy (Cloudflare Pages' build command runs
+// Writes public/version.json for the web deploy (Cloudflare's build command runs
 // `node tools/write-web-version.js`), so Settings can show which build is live. Same numbering
 // as the Android app (android/app/build.gradle): versionName is 2.<commit count>.
 //
@@ -22,7 +22,7 @@ function commitCount() {
   }
 }
 
-let commit = process.env.CF_PAGES_COMMIT_SHA || null;
+let commit = process.env.WORKERS_CI_COMMIT_SHA || process.env.CF_PAGES_COMMIT_SHA || null;
 try {
   commit = commit || git('rev-parse HEAD');
 } catch (error) {

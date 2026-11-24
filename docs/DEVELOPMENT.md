@@ -137,24 +137,31 @@ is how Watchlog runs on an iPhone without the App Store: open the site in Safari
   without it Settings says "web preview".
 - **Notifications** aren't available on the web yet (see the roadmap).
 
-### Hosting on Cloudflare Pages
+### Hosting on Cloudflare
 
-The site is hosted for free on [Cloudflare Pages](https://pages.cloudflare.com/), deployed from
-GitHub. One-time setup in the Cloudflare dashboard: **Workers & Pages → Create → Pages → Connect
-to Git**, pick this repository, then:
+The site is hosted for free as a [Cloudflare Worker](https://developers.cloudflare.com/workers/static-assets/)
+that only serves static files, deployed from GitHub. `wrangler.jsonc` (repository root) names the
+Worker `watchlog` and points it at `public/`. The accounts and sync API planned in the roadmap
+will be added to this same Worker.
+
+One-time setup in the Cloudflare dashboard: **Workers & Pages → Create → Import a repository**,
+pick this repository, then:
 
 | Setting | Value |
 |---|---|
-| Production branch | `main` |
-| Framework preset | None |
+| Project name | `watchlog` (must match `name` in `wrangler.jsonc`) |
 | Build command | `node tools/write-web-version.js` |
-| Build output directory | `public` |
+| Deploy command | `npx wrangler deploy` |
+| Preview builds | On |
 
-Every push to `main` then deploys the site, and every other branch gets its own preview address
-(shown on its pull request), which can be opened on a phone to try a change before merging.
+Every push to `main` then deploys the site at `https://watchlog.<your-subdomain>.workers.dev`,
+and every other branch gets its own preview address (shown on its pull request), which can be
+opened on a phone to try a change before merging. Wrangler isn't a dependency of this
+repository: Cloudflare's build runs it with `npx` (it needs a newer Node than the Node 18 the
+project supports).
 
-Cloudflare Pages serves `page.html` at `/page` and redirects to it. The service worker caches
-pages without the `.html`, so both addresses work offline.
+Cloudflare serves `page.html` at `/page` and redirects to it. The service worker caches pages
+without the `.html`, so both addresses work offline.
 
 ### Testing on iPhone without a Mac
 

@@ -6,7 +6,7 @@
 // the app still opens and the library (IndexedDB) is usable. Only this site's own files are
 // handled; TMDB requests and posters go straight to the network as before.
 //
-// Some hosts (Cloudflare Pages) redirect `page.html` to `/page`. Cache keys drop the `.html`
+// Some hosts (Cloudflare's static assets) redirect `page.html` to `/page`. Cache keys drop the `.html`
 // and the query string, so both spellings find the same cached page, and redirected responses
 // are re-wrapped before caching (Safari refuses to show a cached redirect for a navigation).
 //
