@@ -41,8 +41,8 @@ function backupFilename(profile) {
   return `watchlog-backup-${profileSlug(profile)}.json`;
 }
 
-function downloadBackupInBrowser(json, filename) {
-  const blob = new Blob([json], { type: 'application/json' });
+function downloadBackupInBrowser(json, filename, type = 'application/json') {
+  const blob = new Blob([json], { type });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -125,6 +125,33 @@ function daysSinceBackupExport(profileId, now = new Date()) {
   const last = getLastBackupExport(profileId);
   if (!last) return null;
   return Math.max(0, Math.floor((now - new Date(last)) / (24 * 60 * 60 * 1000)));
+}
+
+// Saves a small text file the way backups are saved: the share sheet on Android and on phones'
+// browsers ("Save to Files" on iPhone), a download on a computer. Used for the account key
+// (profile-picker.js). Returns false when the person cancelled the share sheet.
+async function saveTextFile(text, filename, { title = 'Watchlog' } = {}) {
+  if (isNativeApp()) {
+    const { Filesystem, Directory, Encoding } = window.capacitorFilesystem;
+    const { Share } = window.capacitorShare;
+    const written = await Filesystem.writeFile({ path: filename, data: text, directory: Directory.Cache, encoding: Encoding.UTF8 });
+    await Share.share({ title, dialogTitle: 'Save or send the file', url: written.uri });
+    return true;
+  }
+  const touchDevice = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  if (touchDevice && navigator.canShare && typeof File !== 'undefined') {
+    const file = new File([text], filename, { type: 'text/plain' });
+    if (navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title });
+        return true;
+      } catch (error) {
+        if (error && error.name === 'AbortError') return false;
+      }
+    }
+  }
+  downloadBackupInBrowser(text, filename, 'text/plain');
+  return true;
 }
 
 // Returns false when the person cancelled the share sheet (nothing was saved).

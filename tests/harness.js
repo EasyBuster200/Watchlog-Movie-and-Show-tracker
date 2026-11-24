@@ -17,7 +17,7 @@ const { webcrypto: crypto } = require('node:crypto');
 
 const SCRIPTS_DIR = path.join(__dirname, '..', 'public', 'scripts');
 const PAGE_SCRIPTS = [
-  'standardItem.js', 'localDb.js', 'localApi.js', 'profiles.js', 'backup.js', 'autoBackup.js', 'notifications.js',
+  'standardItem.js', 'localDb.js', 'localApi.js', 'profiles.js', 'serverApi.js', 'backup.js', 'autoBackup.js', 'notifications.js',
 ];
 const TMDB_ORIGIN = 'https://api.themoviedb.org';
 
@@ -33,7 +33,11 @@ function jsonResponse(data, status = 200) {
 // `native: true` makes the page behave like the Android app: Capacitor.isNativePlatform() is
 // true and fake Filesystem/LocalNotifications plugins are installed (see createFakeFilesystem
 // and createFakeLocalNotifications below - returned as `filesystem`/`notifications`).
-function createApp({ tmdb = {}, withProfile = true, native = false, filesystemOptions, notificationOptions } = {}) {
+// `server` stands in for the Watchlog server (server/, the /v1/ API): a function
+// (method, path, { body, headers, url }) returning { status, body, headers } (or `text` for a
+// body that isn't JSON), or throwing to
+// simulate no network. Every request is recorded in `serverRequests`.
+function createApp({ tmdb = {}, server = null, withProfile = true, native = false, filesystemOptions, notificationOptions } = {}) {
   const storage = new Map();
   const localStorage = {
     getItem: key => (storage.has(key) ? storage.get(key) : null),
@@ -45,8 +49,26 @@ function createApp({ tmdb = {}, withProfile = true, native = false, filesystemOp
   const tmdbRequests = [];
   const callCounts = new Map();
 
+  const serverRequests = [];
+
+  async function serverFetch(url, init = {}) {
+    const headers = init.headers || {};
+    const body = init.body ? JSON.parse(init.body) : undefined;
+    const method = (init.method || 'GET').toUpperCase();
+    serverRequests.push({ method, url: url.toString(), path: url.pathname, body, headers });
+    if (!server) throw new TypeError('Failed to fetch');
+    const reply = await server(method, url.pathname, { body, headers, url });
+    const status = reply.status || 200;
+    if (status === 204) return new Response(null, { status });
+    const text = reply.text !== undefined ? reply.text : reply.body === undefined ? '' : JSON.stringify(reply.body);
+    return new Response(text, {
+      status, headers: { 'Content-Type': 'application/json', ...(reply.headers || {}) },
+    });
+  }
+
   async function networkFetch(input, init) {
     const url = new URL(String(input));
+    if (url.pathname.startsWith('/v1/')) return serverFetch(url, init);
     if (url.origin !== TMDB_ORIGIN) throw new Error(`Unexpected network request to ${url}`);
     const tmdbPath = url.pathname.replace(/^\/3/, '');
     tmdbCalls.push(tmdbPath + url.search);
@@ -141,7 +163,7 @@ function createApp({ tmdb = {}, withProfile = true, native = false, filesystemOp
   }
 
   return {
-    context, run, api, call, put, getAll, tmdbCalls, tmdbRequests, resetTmdbCalls, filesystem, notifications, background,
+    context, run, api, call, put, getAll, tmdbCalls, tmdbRequests, resetTmdbCalls, filesystem, notifications, background, serverRequests,
   };
 }
 
