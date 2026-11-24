@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../src/index.js';
-import { createEnv, createCtx, request, ORIGIN } from './helpers.js';
+import { createEnv, createCtx, request, ORIGIN, LATEST_MIGRATION } from './helpers.js';
 
 async function call(req, env = createEnv()) {
   const response = await worker.fetch(req, env, createCtx());
@@ -14,7 +14,7 @@ async function call(req, env = createEnv()) {
 test('health: the Worker is up, the database answers, and the newest migration is reported', async () => {
   const { status, body, headers } = await call(request('/v1/health'));
   assert.equal(status, 200);
-  assert.deepEqual(body, { ok: true, environment: 'test', database: 'ok', migration: '0001_init.sql' });
+  assert.deepEqual(body, { ok: true, environment: 'test', database: 'ok', migration: LATEST_MIGRATION });
   assert.match(headers.get('Content-Type'), /application\/json/);
   assert.equal(headers.get('Cache-Control'), 'no-store');
 });

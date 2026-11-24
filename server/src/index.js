@@ -2,11 +2,12 @@
 // first; this script only runs for requests that match no file:
 // - /v1/...  the server API (api.js)
 // - anything else: handed back to the static files, which answer 404
-// On a schedule (Sundays, see wrangler.jsonc's triggers) it copies the database to R2
-// (backup.js). Cron Triggers never run in previews.
+// On a schedule (Sundays, see wrangler.jsonc's triggers) it deletes expired rows (cleanup.js),
+// then copies the database to R2 (backup.js). Cron Triggers never run in previews.
 
 import { handleApi, isApiPath } from './api.js';
 import { runBackup } from './backup.js';
+import { runCleanup } from './cleanup.js';
 
 export default {
   async fetch(request, env, ctx) {
@@ -16,9 +17,19 @@ export default {
   },
 
   async scheduled(controller, env, ctx) {
-    ctx.waitUntil(runBackup(env, { now: new Date(controller.scheduledTime) }).then(
-      result => console.log('Database backup saved', JSON.stringify(result)),
-      error => console.error('Database backup failed', error && error.stack ? error.stack : error),
-    ));
+    const now = new Date(controller.scheduledTime);
+    ctx.waitUntil((async () => {
+      // A failed cleanup mustn't stop the backup.
+      try {
+        console.log('Cleanup done', JSON.stringify(await runCleanup(env, now)));
+      } catch (error) {
+        console.error('Cleanup failed', error && error.stack ? error.stack : error);
+      }
+      try {
+        console.log('Database backup saved', JSON.stringify(await runBackup(env, { now })));
+      } catch (error) {
+        console.error('Database backup failed', error && error.stack ? error.stack : error);
+      }
+    })());
   },
 };

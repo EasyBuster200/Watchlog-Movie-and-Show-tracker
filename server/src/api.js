@@ -7,31 +7,18 @@
 // CORS: a page on the same address (the web app, any preview) can always call the API. Other
 // origins only when listed in ALLOWED_ORIGINS (wrangler.jsonc vars, comma-separated): the
 // Android app runs at https://localhost. CORS only stops other websites' pages from reading
-// responses in a browser; it isn't authentication (that's Phase 3, accounts).
+// responses in a browser; it isn't authentication (that's the session token, auth.js).
+//
+// Routes live in routes/*.js and register themselves with router.js's route().
 
-export const API_PREFIX = '/v1';
+import { API_PREFIX, ApiError, apiError, findRoutes, paramsFor } from './router.js';
+import './routes/health.js';
+import './routes/accounts.js';
+
+export { API_PREFIX };
 
 export function isApiPath(pathname) {
   return pathname === API_PREFIX || pathname.startsWith(`${API_PREFIX}/`);
-}
-
-const ROUTES = [];
-
-function route(method, pattern, handler) {
-  const names = [];
-  const regex = new RegExp(`^${API_PREFIX}${pattern.replace(/:(\w+)/g, (m, name) => { names.push(name); return '([^/]+)'; })}$`);
-  ROUTES.push({ method, regex, names, handler });
-}
-
-export function json(body, status = 200, headers = {}) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers },
-  });
-}
-
-export function apiError(status, error, message) {
-  return json({ error, message }, status);
 }
 
 function allowedOrigins(env) {
@@ -52,6 +39,7 @@ function withCors(response, origin) {
   const headers = new Headers(response.headers);
   headers.set('Access-Control-Allow-Origin', origin);
   headers.append('Vary', 'Origin');
+  headers.set('Access-Control-Expose-Headers', 'Retry-After');
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
@@ -78,37 +66,22 @@ export async function handleApi(request, env, ctx) {
   const { pathname } = new URL(request.url);
   let response;
   try {
-    const matches = ROUTES.filter(r => r.regex.test(pathname));
+    const matches = findRoutes(pathname);
     const match = matches.find(r => r.method === request.method);
     if (match) {
-      const values = pathname.match(match.regex).slice(1).map(decodeURIComponent);
-      const params = Object.fromEntries(match.names.map((name, i) => [name, values[i]]));
-      response = await match.handler({ request, env, ctx, params });
+      response = await match.handler({ request, env, ctx, params: paramsFor(match, pathname) });
     } else if (matches.length) {
       response = apiError(405, 'method_not_allowed', `${request.method} is not supported here.`);
     } else {
       response = apiError(404, 'not_found', 'There is nothing at this address.');
     }
   } catch (error) {
-    console.error('API error', request.method, pathname, error && error.stack ? error.stack : error);
-    response = apiError(500, 'server_error', 'Something went wrong on the server.');
+    if (error instanceof ApiError) {
+      response = apiError(error.status, error.error, error.message, error.extra);
+    } else {
+      console.error('API error', request.method, pathname, error && error.stack ? error.stack : error);
+      response = apiError(500, 'server_error', 'Something went wrong on the server.');
+    }
   }
   return withCors(response, origin);
 }
-
-// ---------- Routes ----------
-
-// Health check: is the Worker up, and can it reach its database? `migration` is the newest
-// database migration applied (server/migrations), so a deploy can be checked from a browser.
-route('GET', '/health', async ({ env }) => {
-  let database = 'ok';
-  let migration = null;
-  try {
-    const row = await env.DB.prepare('SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1').first();
-    migration = row ? row.name : null;
-  } catch (error) {
-    console.error('Health check: database query failed', error && error.stack ? error.stack : error);
-    database = 'error';
-  }
-  return json({ ok: database === 'ok', environment: env.ENVIRONMENT || 'unknown', database, migration }, database === 'ok' ? 200 : 503);
-});

@@ -15,7 +15,7 @@ Status: **Phase 1 (web app) is done and live at https://watchlog.duartecruzcoelh
 | Topic | Decision |
 |---|---|
 | Hosting | Everything on **Cloudflare**: one Worker (`watchlog`, `wrangler.jsonc`) serves the app files now and will also run the API, D1 (SQLite) for the database, Worker secrets for keys. One account, one platform. |
-| Sign-in | An **account key** (a long random key the person saves) plus an optional, verified **recovery email**. Devices stay signed in; new ones are added with a one-time code from a signed-in device. No passwords, no passkeys for now (see Phase 3). |
+| Sign-in | An **account key** (a long random key the person saves) plus a **required**, verified **recovery email**. Devices stay signed in; new ones are added with a one-time code from a signed-in device. No passwords, no passkeys for now (see Phase 3). |
 | Architecture | **Local-first stays.** IndexedDB on the device is what the app reads and writes. The server is a sync partner and backup, never something a screen waits on. |
 | Offline-only use | Still supported: a **local account** works like today's profiles, with no server and the person's own TMDB token. |
 | Backups | Remove the automatic weekly backup to `Documents/Watchlog`. Keep manual **Export / Import**. For online accounts the server copy is the backup. |
@@ -92,6 +92,8 @@ Do this first: it works with today's local profiles and needs no backend.
 
 ## Phase 3: Accounts
 
+**In progress, in three parts:** **3a, the server** (accounts, account keys, sessions, pairing codes, device list, rate limits; built, see `docs/DEVELOPMENT.md`, "Accounts API"); **3b, the app** (create or sign in to an online account, save the key, add a device, the device list, upgrade a local profile); **3c, the recovery email** (once there's a domain). Decided with the user: the recovery email is **required** (accounts made before 3c will be asked to add one), the recovery hold is **24 hours**, and sign-up is **open for now** with rate limits, until the admin page can make invites. Online accounts keep using their own TMDB token until Phase 5.
+
 ### Two kinds of account
 
 - **Local account:** today's profile, unchanged. Data stays on the device. Uses the person's own TMDB token. Never talks to the server. Anyone can use the app this way at no cost to the owner.
@@ -115,7 +117,7 @@ Decided with the user after comparing passkeys, passwords, email codes, "Sign in
 - Or by entering the account key.
 
 **The recovery email**
-- For when every signed-in device *and* the key are lost. An email address can be added to the account and is **verified** with a code sent to it before it counts.
+- For when every signed-in device *and* the key are lost. Every online account must have an email address (decided with the user), **verified** with a code sent to it before it counts.
 - **Recovery:** on a new device, "Lost your key?", then enter the email, then a one-time code arrives, then enter it. The account then gets a **new key** (the old one stops working), and every other session is signed out.
 - **Safeguard against a hacked inbox:** recovery completes after a **hold** (proposed 24 hours). During it, every signed-in device shows "Someone is recovering your account. Not you? Cancel", and the address gets an email saying the same.
 - Only the address is stored, and only for recovery and notices about the account (no newsletters). It can be changed or removed in Settings.
@@ -136,7 +138,7 @@ Decided with the user after comparing passkeys, passwords, email codes, "Sign in
 
 ### Who can sign up
 
-See [Keeping strangers off the TMDB token](#keeping-strangers-off-the-tmdb-token): sign-up is **invite-only** by default.
+Sign-up is **open for now** (decided with the user): creating accounts is rate-limited per address and overall. It becomes **invite-only** once the admin page can make invites, and before the TMDB proxy (Phase 5) is switched on; see [Keeping strangers off the TMDB token](#keeping-strangers-off-the-tmdb-token).
 
 ## Phase 4: Sync
 
@@ -328,8 +330,6 @@ Each step leaves a working app.
 
 - **Domain:** a custom domain is needed to send recovery emails (Phase 3). Which one? The app can stay on `workers.dev` and only email come from the domain, or the app can move to it too (no sign-in depends on the address any more, so moving later is safe).
 - **Email service:** Cloudflare Email Sending (beta, same platform; check its free limits) or Resend (free tier, about 100 emails a day). Both need the domain's DNS records.
-- **Recovery email required or optional?** Proposed: asked at sign-up, skippable, with a reminder later (like the backup reminder).
-- **Recovery hold:** 24 hours proposed. Shorter is friendlier; longer is safer if someone's inbox is hacked.
 - **Several profiles on one device:** can each be a different online account (e.g. family members sharing a tablet)? Proposed: yes, one online account per profile.
 - **Android notifications:** keep local notifications permanently, or move to server push later?
 - **Usernames:** required for everyone, or only when turning on friends?
