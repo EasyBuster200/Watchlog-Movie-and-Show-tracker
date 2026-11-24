@@ -92,7 +92,7 @@ Do this first: it works with today's local profiles and needs no backend.
 
 ## Phase 3: Accounts
 
-**In progress, in three parts:** **3a, the server** (accounts, account keys, sessions, pairing codes, device list, rate limits; built, see `docs/DEVELOPMENT.md`, "Accounts API"); **3b, the app** (create or sign in to an online account, save the key, add a device, the device list, upgrade a local profile); **3c, the recovery email** (once there's a domain). Decided with the user: the recovery email is **required** (accounts made before 3c will be asked to add one), the recovery hold is **24 hours**, and sign-up is **open for now** with rate limits, until the admin page can make invites. Online accounts keep using their own TMDB token until Phase 5.
+**In progress, in three parts:** **3a, the server** (accounts, account keys, sessions, pairing codes, device list, rate limits; built, see `docs/DEVELOPMENT.md`, "Accounts API"); **3b, the app** (create or sign in to an online account, save the key, add a device, the device list, upgrade a local profile; built, hidden until Phase 4 sync exists, see `docs/DEVELOPMENT.md`, "Accounts in the app"); **3c, the recovery email** (once there's a domain). Decided with the user: the recovery email is **required** (accounts made before 3c will be asked to add one), the recovery hold is **24 hours**, and sign-up is **open for now** with rate limits, until the admin page can make invites. Online accounts keep using their own TMDB token until Phase 5.
 
 ### Two kinds of account
 

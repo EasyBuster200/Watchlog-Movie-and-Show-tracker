@@ -247,6 +247,21 @@ is limited per address (10 per 15 minutes), and making keys and codes per accoun
 address. The weekly job (`cleanup.js`) deletes expired sessions and codes and old counters
 before the backup.
 
+#### Accounts in the app
+
+`public/scripts/serverApi.js` makes the app's requests to the API above, and the profile picker
+and Settings use it: create an account, save the key, sign in with the key or a code from another
+device, add a device, see and sign out devices, sign out, delete the account. An online profile
+is an ordinary profile with an `account` on it; its library stays on the device until syncing
+exists (roadmap Phase 4).
+
+**It's all hidden** until then. To try it, open the browser console on the app (a pull request's
+preview, so the preview database is used) and run
+`localStorage.setItem('watchlog_preview_online_accounts', '1')`, then reload. The web app calls the
+server on its own address; the Android app calls production; setting
+`localStorage.watchlog_server_url` points either at another server (it must allow the page's
+origin, see CORS above).
+
 #### Server database
 
 A [D1](https://developers.cloudflare.com/d1/) database (SQLite), bound as `DB`. Production uses
