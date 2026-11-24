@@ -6,7 +6,9 @@
 // - every build, previews and main alike, runs `npm run cf:build`: writes version.json and
 //   applies the database migrations (server/migrations) to the PREVIEW database;
 // - main then runs `npm run cf:deploy`: migrations to the PRODUCTION database, then deploys;
-// - other branches run `npx wrangler preview` (fixed by Cloudflare, not configurable).
+// - other branches run `npx wrangler preview`.
+// The dashboard keeps these per tab (Settings → Builds: Production / Previews Base): the build
+// command has to be `npm run cf:build` on both.
 //
 // Production and previews use different databases. Previews don't inherit anything from the
 // top level except assets, compatibility_date and compatibility_flags, so whatever previews need

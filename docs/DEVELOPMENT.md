@@ -150,9 +150,15 @@ pick this repository, then:
 | Setting | Value |
 |---|---|
 | Project name | `watchlog` (must match `name` in `wrangler.jsonc`) |
-| Build command | `npm run cf:build` |
+| Build command | `npm run cf:build` (on **both** tabs, see below) |
 | Deploy command | `npm run cf:deploy` |
-| Preview builds | On (in the setup screen; previews always run `npx wrangler preview`) |
+| Preview command | `npx wrangler preview` |
+| Preview builds | On |
+
+Afterwards these live in the Worker's **Settings → Builds**, which has two tabs with separate
+settings: **Production** (build and deploy command, used for `main`) and **Previews Base**
+(build and preview command, used for every other branch). A change on one tab doesn't reach the
+other, so the build command has to be `npm run cf:build` on both.
 
 Every push to `main` then deploys the site, live at **https://watchlog.duartecruzcoelho.workers.dev**,
 and every other branch gets its own preview address, `https://<branch>-watchlog.<subdomain>.workers.dev`
@@ -164,8 +170,8 @@ the branch's own commits, so it can be higher than what `main` gets after a squa
 The build command runs for every build, previews and `main` alike: `cf:build` (`package.json`)
 writes `version.json` and applies the database migrations to the **preview** database. Only
 `main` then runs the deploy command, `cf:deploy`, which applies them to the **production**
-database before deploying. Previews always run Cloudflare's own `npx wrangler preview`, which
-the dashboard doesn't let you change, so nothing a preview runs can touch production. Keeping
+database before deploying. Previews run the preview command, `npx wrangler preview`, which never
+touches the production database. Keeping
 the commands in `package.json` means changing them doesn't need the dashboard. Wrangler isn't a dependency of
 this repository: Cloudflare's build runs it with `npx` (it needs a newer Node than the Node 18 the
 app's tooling supports).
