@@ -107,8 +107,28 @@ function renderFilmography(credits, context) {
   const grid = document.getElementById('filmography-grid');
   const emptyEl = document.getElementById('filmography-empty');
   const pager = document.getElementById('filmography-pagination');
-  const chips = document.getElementById('filmography-filters');
   let filter = 'all';
+  // A BrowseHeader titled "Filmography" (always newest first); its filter sheet picks All /
+  // Movies / Shows, with counts.
+  const header = createBrowseHeader({
+    title: 'Filmography',
+    sections: [{
+      id: 'type',
+      label: 'Show',
+      kind: 'single',
+      options: FILMOGRAPHY_FILTERS.map(f => ({ id: f.id, label: `${f.label} ${credits.filter(f.match).length}`, summary: f.label })),
+    }],
+    summary: 'Newest first',
+    onChange: ({ values }) => {
+      filter = values.type;
+      const f = FILMOGRAPHY_FILTERS.find(x => x.id === filter);
+      header.update({ summary: filter === 'all' ? 'Newest first' : `Newest first · ${f.label}` });
+      renderPage(1);
+    },
+  });
+  const slot = document.getElementById('filmography-filters');
+  slot.innerHTML = '';
+  slot.appendChild(header.el);
 
   function renderPage(page) {
     const shown = credits.filter(FILMOGRAPHY_FILTERS.find(f => f.id === filter).match);
@@ -120,16 +140,6 @@ function renderFilmography(credits, context) {
     renderPagination(pager, page, Math.max(1, Math.ceil(shown.length / FILMOGRAPHY_PAGE_SIZE)), renderPage);
   }
 
-  function renderChips() {
-    chips.innerHTML = '';
-    FILMOGRAPHY_FILTERS.forEach(f => chips.appendChild(buildChip(f.label, {
-      selected: filter === f.id,
-      count: credits.filter(f.match).length,
-      onClick: () => { filter = f.id; renderChips(); renderPage(1); },
-    })));
-  }
-
-  renderChips();
   renderPage(1);
 }
 

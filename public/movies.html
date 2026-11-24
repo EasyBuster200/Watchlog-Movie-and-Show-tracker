@@ -62,33 +62,7 @@
     </section>
 
     <section class="stack">
-      <h2 class="section-title">Browse All Movies</h2>
-      <div class="filter-card">
-        <button type="button" class="filter-card__toggle" id="filter-toggle" aria-expanded="false" aria-controls="filter-panel">
-          <span class="filter-card__icon"><svg class="tt-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10"></path><path d="M18 7h2"></path><path d="M16 5v4"></path><path d="M4 17h4"></path><path d="M12 17h8"></path><path d="M10 15v4"></path></svg></span>
-          <span class="filter-card__text">
-            <span class="filter-card__title">Filter &amp; sort</span>
-            <span class="filter-card__summary" id="filter-summary">Popular · All genres</span>
-          </span>
-          <span class="filter-card__badge" id="filter-badge" hidden></span>
-          <span class="filter-card__chevron"><svg class="tt-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></span>
-        </button>
-        <div class="filter-card__panel" id="filter-panel" hidden>
-          <div class="stack-sm">
-            <span class="tt-filter-label">Sort by</span>
-            <div class="chip-wrap" role="group" aria-label="Sort by" id="filter-sorts"></div>
-          </div>
-          <div class="filter-card__divider"></div>
-          <div class="stack-sm">
-            <div class="filter-card__group-head">
-              <span class="tt-filter-label">Genres</span>
-              <button type="button" class="tt-link" id="filter-clear" hidden>Clear</button>
-            </div>
-            <div class="chip-wrap" role="group" aria-label="Genres" id="filter-genres"></div>
-          </div>
-        </div>
-      </div>
-      <span class="muted-note" id="browse-result-label"></span>
+      <div id="browse-header"></div>
       <p class="empty-note" id="browse-empty" hidden>Nothing matches these genres on this page. Try removing one.</p>
       <div class="poster-grid" id="browse-grid"></div>
       <nav class="pager" id="browse-pagination"></nav>

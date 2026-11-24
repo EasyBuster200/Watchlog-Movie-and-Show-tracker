@@ -19,8 +19,10 @@
     "components/SearchField/README.md",
     "components/SeasonRow/README.md",
     "components/SectionHeader/README.md",
+    "components/SideNav/README.md",
     "components/StatTile/README.md",
     "components/Switch/README.md",
+    "components/TextField/README.md",
     "components/bundle.css",
     "components/bundle.js",
     "components/index.d.ts",
@@ -100,6 +102,11 @@
       "summary": "An on/off toggle for settings that take effect immediately (notifications, auto-backup, hide watched)."
     },
     {
+      "name": "TextField",
+      "group": "Inputs",
+      "summary": "A labelled 48px text input for forms (sign in, sign up, password reset, settings)."
+    },
+    {
       "name": "BrowseHeader",
       "group": "Navigation",
       "summary": "The title row above any browsable list, with a sort icon and a filter icon instead of rows of filter chips."
@@ -128,6 +135,11 @@
       "name": "BottomNav",
       "group": "Navigation",
       "summary": "The six-tab bar at the bottom of every screen: Home, Watchlist, Lists, Movies, Shows, Profile."
+    },
+    {
+      "name": "SideNav",
+      "group": "Navigation",
+      "summary": "The left sidebar for the browser version of the app, replacing BottomNav at desktop widths."
     }
   ],
   "assetGroups": []

@@ -157,8 +157,9 @@ When it's done, Watchlog appears in your app list.
 
 ### 3. Create your profile
 
-1. Open **Watchlog** and tap **+ New profile**.
-2. Enter your **name** and paste your **API Read Access Token** from step 1.
+1. Open **Watchlog**. On **Who's watching?**, tap **+ Offline profile**.
+2. Enter your **name** and paste your **API Read Access Token** from step 1 (the eye button shows
+   what you pasted).
 3. Tap **Create profile**. Watchlog checks the token with TMDB first, and tells you if something
    is wrong (for example if you pasted the short "API Key" by mistake).
 4. Tap your new profile to start.
@@ -173,13 +174,14 @@ The bar at the bottom of the screen has six tabs: **Home**, **Watchlist**, **Lis
 ### Find something
 
 - **Search** with the search box at the top of **Home**, **Movies** and **Shows**. Results appear
-  as you type; press Enter for the full results, where you can narrow them down to Shows, Movies
-  or People.
+  as you type; press Enter for the full results, where the filter button (top right) narrows them
+  down to Shows, Movies or People.
 - **Home** has *Continue Watching*, *Airing Soon*, and what's trending today.
 - **Movies** and **Shows** have popular titles (in your country), recommendations based on what
   you've watched (and, for movies, *Coming Soon*). Every row has **See all** for the full list.
-  At the bottom, **Browse All** lists everything: tap **Filter & sort** to pick genres and sort
-  by Popular, Top rated or Newest.
+  At the bottom, **Browse All** lists everything: the sort button picks Popular, Top rated or
+  Newest, and the filter button picks genres (a dot on it means a filter is on). The line under
+  the title says what's applied.
 - Tap any poster to open its page: description, cast, trailer, the TMDB rating, *More Like This*
   for movies, and the seasons for shows. Tap a cast member to see their page: their best-known
   titles and every movie and show they've been in, newest first.
@@ -240,8 +242,8 @@ filters at the top.
 ### Your profile and stats
 
 The **Profile** tab shows your stats and previews of your watched and favourite movies and shows
-(tap **See all** on any of them for the full list, which you can sort by when you added it,
-A–Z or rating). Your watched shows' full list shows how far along you are in each one, with
+(tap **See all** on any of them for the full list; its sort button orders it by when you added
+it, A–Z or rating). Your watched shows' full list shows how far along you are in each one, with
 its status (Watching, Caught up, Completed, Dropped), and can be filtered by status. Tap **See
 all** next to *Stats* for the full stats page: hours watched each month, and your top genres and
 actors. The line under your name
@@ -309,8 +311,10 @@ or lose your phone without a backup, it's gone, so it's worth knowing how backup
 
 1. Install Watchlog (see [Install it](#install-it)) and put the backup file on the phone, for
    example by downloading it from Drive.
-2. Open Watchlog. On the profile screen, tap **Import backup** and choose the file.
-3. Paste your TMDB **API Read Access Token** and tap **Restore backup**.
+2. Open Watchlog. On **Who's watching?**, tap **Import backup** and choose the file.
+3. Check what's in it (profile, shows, movies, lists, when it was saved) and tap **Restore as
+   offline profile**.
+4. Paste your TMDB **API Read Access Token** and tap **Restore backup**.
 
 **Moving from Android to iPhone** (or back) works the same way: export a backup in one app, get
 the file onto the other phone (Drive, email, iCloud Drive...), and restore it there.
