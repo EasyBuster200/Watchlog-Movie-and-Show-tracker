@@ -238,6 +238,7 @@ Online accounts (roadmap Phase 3) sign in with an **account key**, not a passwor
 | `DELETE /v1/sessions/:id` | yes | Signs one of the account's devices out |
 | `DELETE /v1/session` | yes | Signs this device out |
 | `GET /v1/tmdb/<TMDB path>` | yes | TMDB, asked with the owner's token (below) |
+| `POST /v1/sync` | yes | Sends this device's changes and returns everyone else's (below) |
 
 Errors a client should expect: `400` (`name_required`, `invalid_key_format`,
 `invalid_code_format`, `invalid_json`), `401` (`signed_out`, `wrong_key`, `wrong_code`), `404`,
@@ -247,6 +248,30 @@ is limited per address (10 per 15 minutes), and making keys and codes per accoun
 (`LIMITS` in `routes/accounts.js`). Rate-limit counters store a hash of the address, never the
 address. The weekly job (`cleanup.js`) deletes expired sessions and codes and old counters
 before the backup.
+
+#### Sync API
+
+`POST /v1/sync` (`server/src/routes/sync.js`, signed in) both sends a device's changes and returns
+everything changed since that device last asked:
+
+```
+request:  { since: <cursor, 0 the first time>, changes: [{ kind, key, data, deleted, updatedAt }] }
+response: { cursor, changes: [...same shape...], more, accepted }
+```
+
+- Every record of every account is one row of `sync_records` (migration `0003_sync.sql`), keyed by
+  account, `kind` (`watched_movie`, `watched_episode`, `favorite`, `list`, `list_item`, `prefs`) and
+  `key`. A deletion stays as a tombstone (`deleted: true`, `data: null`) so devices that were offline
+  still hear about it.
+- **Newest wins** per record: a change is stored only if its `updatedAt` is later than the stored
+  one. `updatedAt` comes from the device's clock, capped at the server's clock plus 5 minutes, so
+  a device whose clock runs ahead can't win every argument.
+- **Order:** each stored change gets the account's next `seq` (`accounts.sync_seq`, reserved
+  atomically per request). A device keeps the highest `seq` it has seen as its cursor and asks for
+  everything after it. Its own changes come back too; applying them again changes nothing.
+- **Pieces:** at most 200 changes per request (128 KB) and 500 per reply; `more: true` means ask
+  again with the new cursor. That keeps each request well inside the 10 ms CPU limit.
+- Limited to 600 requests per account per hour. Deleting an account deletes its records.
 
 #### The TMDB proxy
 

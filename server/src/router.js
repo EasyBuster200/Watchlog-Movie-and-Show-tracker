@@ -55,10 +55,10 @@ export class ApiError extends Error {
 
 const MAX_BODY_BYTES = 16 * 1024;
 
-// Parses a JSON object body (at most 16 KB). Throws a 400 ApiError otherwise.
-export async function readJson(request) {
+// Parses a JSON object body (at most 16 KB, or `maxBytes`). Throws a 400 ApiError otherwise.
+export async function readJson(request, { maxBytes = MAX_BODY_BYTES } = {}) {
   const text = await request.text();
-  if (text.length > MAX_BODY_BYTES) throw new ApiError(413, 'body_too_large', 'That request is too large.');
+  if (text.length > maxBytes) throw new ApiError(413, 'body_too_large', 'That request is too large.');
   if (!text) return {};
   let body;
   try {

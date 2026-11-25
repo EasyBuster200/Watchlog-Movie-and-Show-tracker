@@ -15,6 +15,7 @@ import { API_PREFIX, ApiError, apiError, findRoutes, paramsFor } from './router.
 import './routes/health.js';
 import './routes/accounts.js';
 import './routes/tmdb.js';
+import './routes/sync.js';
 
 export { API_PREFIX };
 
