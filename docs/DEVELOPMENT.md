@@ -135,7 +135,8 @@ is how Watchlog runs on an iPhone without the App Store: open the site in Safari
 - **Version:** `tools/write-web-version.js` writes `public/version.json` (`2.<commit count>`, the
   same numbering as the APK, plus the commit id from git) during the deploy, and Settings shows
   it. It's not committed; without it Settings says "web preview".
-- **Notifications** aren't available on the web yet (see the roadmap).
+- **Notifications** on the web come from the server, for online accounts ("Server notifications"
+  below). Offline profiles in the web app have none.
 
 ### Hosting on Cloudflare
 
@@ -240,7 +241,7 @@ Online accounts (roadmap Phase 3) sign in with an **account key**, not a passwor
 | `DELETE /v1/session` | yes | Signs this device out |
 | `GET /v1/tmdb/<TMDB path>` | yes | TMDB, asked with the owner's token (below) |
 | `POST /v1/sync` | yes | Sends this device's changes and returns everyone else's (below) |
-| `GET /v1/push/key`, `PUT`/`DELETE /v1/push/subscription` | yes (key: no) | Web Push for this device ("Admin and sign-ups" below) |
+| `GET /v1/push/key`, `PUT`/`DELETE /v1/push/subscription` | yes (key: no) | Web Push for this device: `PUT` takes `{ endpoint, keys, kinds: { requests, episodes, releases, recap }, timeZone, region }` ("Server notifications" below) |
 | `/v1/admin/...` | the admin | The admin page's API ("Admin and sign-ups" below) |
 
 Errors a client should expect: `400` (`name_required`, `invalid_key_format`,
@@ -302,6 +303,29 @@ Secrets, Production tab, type Secret):**
 To try it on this machine: `npx wrangler d1 migrations apply DB --local`, put
 `ADMIN_ACCOUNT_IDS=...` (and VAPID keys) in a `.dev.vars` file (gitignored), and start the
 `watchlog-worker` launch configuration.
+
+#### Server notifications
+
+The web app's notifications (roadmap Phase 6) are sent by the server: `server/src/notifications.js`,
+run by an hourly Cron Trigger (`0 * * * *` in `wrangler.jsonc`, next to the Sunday backup).
+The Android app keeps its own local notifications and never subscribes, so nothing arrives twice.
+
+- **Who gets what:** each device's push subscription says which kinds it wants (Settings →
+  Notifications in the web app; the admin page's switch is the sign-up requests kind), its
+  time zone and the profile's region. The switches are per device, as in the Android app.
+- **New episodes:** shows with any watched episode on the account, whose next episode airs
+  today in the device's time zone, from 18:00. **Release reminders:** Watchlist movies released
+  today in the device's region (cinemas first, else streaming), from 18:00. **Weekly recap:**
+  Sundays from 19:00: the week's watched episodes and movies with their watch time, and how many
+  tracked shows have an episode in the next 7 days.
+- **Limits per run** (the free plan: 50 outside requests, 10 ms CPU): at most 15 titles are
+  refreshed from TMDB (`tmdb_titles`, oldest first, with the owner's `TMDB_TOKEN`, counted in
+  the TMDB daily cap and paused by the admin page's TMDB switch) and at most 30 notifications
+  sent; anything left goes out an hour later. `push_log` stops repeats.
+- **Setup:** nothing new beyond the VAPID keys (above) and `TMDB_TOKEN`.
+- **Try it locally:** with VAPID keys in `.dev.vars`, the `watchlog-worker` launch configuration
+  (it passes `--test-scheduled`), then open `http://localhost:8787/__scheduled?cron=0+*+*+*+*`;
+  the result is logged as `Notifications {...}`.
 
 #### Sync API
 

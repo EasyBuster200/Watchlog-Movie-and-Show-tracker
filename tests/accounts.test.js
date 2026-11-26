@@ -253,3 +253,15 @@ test('a device the server signed out gets its session back on the same profile',
   assert.equal(activeAccount(app).sessionToken, 'token-2');
   assert.equal(app.run('getProfiles().length'), 1);
 });
+
+test("this device's notification switches belong to one profile and are forgotten on sign-out", async () => {
+  const app = createApp({ server: fakeServer({ 'DELETE /v1/session': { status: 204 } }) });
+  const id = app.run('getActiveProfileId()');
+  app.run(`linkProfileToAccount('${id}', ${JSON.stringify(signInReply().body)})`);
+  app.run(`localStorage.setItem(PUSH_DEVICE_KEY, JSON.stringify({ profileId: '${id}', kinds: { episodes: true, recap: true }, timeZone: 'Europe/Lisbon', region: 'PT' }))`);
+  assert.deepEqual(JSON.parse(JSON.stringify(app.run('devicePushKinds(getActiveProfile())'))), { requests: false, episodes: true, releases: false, recap: true });
+  assert.deepEqual(JSON.parse(JSON.stringify(app.run("devicePushKinds({ id: 'someone-else' })"))), { requests: false, episodes: false, releases: false, recap: false });
+  assert.equal(app.run('webPushSupported()'), false, 'no push in the test page');
+  await app.run('signOutOnlineAccount(getActiveProfile())');
+  assert.equal(app.run('localStorage.getItem(PUSH_DEVICE_KEY)'), null);
+});

@@ -112,48 +112,15 @@ async function findAdminProfile() {
 
 // ---------- Notifications on this device (Web Push) ----------
 
-function pushSupported() {
-  return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window && !isNativeAppPlatform();
-}
-
-function onIphoneBrowserTab() {
-  const ios = /iPhone|iPad/.test(navigator.userAgent);
-  const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone;
-  return ios && !standalone;
-}
-
-function keyBytes(base64Url) {
-  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (base64Url.length % 4)) % 4);
-  return Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-}
-
-async function currentSubscription() {
-  const registration = await navigator.serviceWorker.ready;
-  return { registration, subscription: await registration.pushManager.getSubscription() };
-}
-
-async function turnPushOn() {
-  const { publicKey } = await serverRequest('GET', '/v1/push/key');
-  const permission = await Notification.requestPermission();
-  if (permission !== 'granted') throw new Error('Notifications are blocked for this site. Allow them in the browser or phone settings.');
-  const { registration, subscription } = await currentSubscription();
-  const sub = subscription || await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) });
-  await accountRequest(adminProfile, 'PUT', '/v1/push/subscription', sub.toJSON());
-}
-
-async function turnPushOff() {
-  const { subscription } = await currentSubscription();
-  if (!subscription) return;
-  await accountRequest(adminProfile, 'DELETE', '/v1/push/subscription', { endpoint: subscription.endpoint }).catch(() => {});
-  await subscription.unsubscribe();
-}
+// The helpers (webPushSupported, setDevicePush, ...) are in serverApi.js, shared with Settings,
+// where the same device turns on episode, release and recap notifications.
 
 async function renderPush(card, serverHasPush) {
   if (!serverHasPush) {
     card.appendChild(row('Notifications', 'Not set up on the server yet (the VAPID keys, see docs/DEVELOPMENT.md).'));
     return;
   }
-  if (!pushSupported()) {
+  if (!webPushSupported()) {
     card.appendChild(row('Notifications', isNativeAppPlatform()
       ? "The Android app can't get these yet. Open the admin page in a browser, or add Watchlog to an iPhone's Home Screen."
       : "This browser can't receive push notifications."));
@@ -163,11 +130,10 @@ async function renderPush(card, serverHasPush) {
     card.appendChild(row('Notifications', 'On iPhone, add Watchlog to the Home Screen (Share → Add to Home Screen) and open the admin page from there.'));
     return;
   }
-  let subscribed = false;
-  try { subscribed = Boolean((await currentSubscription()).subscription); } catch (err) { /* no service worker yet */ }
-  const sw = buildSwitch('Notify me on this device', subscribed && Notification.permission === 'granted', async on => {
+  const subscribed = devicePushKinds(adminProfile).requests && Notification.permission === 'granted';
+  const sw = buildSwitch('Notify me on this device', subscribed, async on => {
     try {
-      if (on) await turnPushOn(); else await turnPushOff();
+      await setDevicePush(adminProfile, { requests: on });
     } catch (err) {
       sw.setOn(!on);
       await confirmDialog({ title: "Couldn't change notifications", message: err.message || 'Try again.', confirmLabel: 'OK' });

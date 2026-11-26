@@ -62,7 +62,7 @@ test('the Worker script, static files, backups bucket and weekly schedule are co
   assert.equal(config.assets.directory, './public');
   assert.equal(config.assets.binding, 'ASSETS');
   assert.ok(config.r2_buckets.some(b => b.binding === 'BACKUPS'));
-  assert.equal(config.triggers.crons.length, 1);
+  assert.deepEqual(config.triggers.crons, ['0 3 * * SUN', '0 * * * *']);
   assert.equal(config.vars.ENVIRONMENT, 'production');
   assert.equal(config.previews.vars.ENVIRONMENT, 'preview');
   assert.equal(config.previews.triggers, undefined, 'Cron Triggers do not belong in previews');
@@ -80,4 +80,10 @@ test('deploys apply migrations to the right database before uploading', () => {
   // touches production (previews run `npx wrangler preview`).
   assert.equal(scripts['cf:build'], 'node tools/write-web-version.js && npx wrangler d1 migrations apply DB --remote --config wrangler.preview-db.jsonc');
   assert.equal(scripts['cf:deploy'], 'npx wrangler d1 migrations apply DB --remote && npx wrangler deploy');
+});
+
+test("the Worker's main module exports only its handlers (anything else stops it starting)", () => {
+  const source = fs.readFileSync(path.join(ROOT, config.main), 'utf8');
+  const exports = source.match(/^export\s+(?!default\b)\S+.*$/gm) || [];
+  assert.deepEqual(exports, []);
 });

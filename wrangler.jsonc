@@ -46,8 +46,9 @@
   "r2_buckets": [
     { "binding": "BACKUPS", "bucket_name": "watchlog-backups" }
   ],
-  // Weekly database backup to R2, Sundays 03:00 UTC (server/src/backup.js).
-  "triggers": { "crons": ["0 3 * * SUN"] },
+  // Weekly database backup to R2, Sundays 03:00 UTC (server/src/backup.js's
+  // BACKUP_CRON), and the hourly notifications run (server/src/notifications.js).
+  "triggers": { "crons": ["0 3 * * SUN", "0 * * * *"] },
 
   // ---------- Previews (one per branch / pull request) ----------
   // No R2 bucket and no cron: Cron Triggers never run in previews.

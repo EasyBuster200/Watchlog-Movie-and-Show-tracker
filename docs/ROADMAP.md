@@ -225,7 +225,10 @@ The site and the APK are public, so assume anyone can open the app. Several laye
 
 ## Phase 6: Notifications through the server
 
-**Foundation built** with the admin page: Web Push sending (`server/src/webpush.js`, `push.js`), subscriptions per signed-in device (`/v1/push/...`), and the service worker showing notifications. Only the owner's sign-up requests use it so far; the switch is on the admin page.
+**Built** (`server/src/notifications.js`; `docs/DEVELOPMENT.md`, "Server notifications"): an hourly run sends new episodes, release reminders and the weekly recap to web app devices of online accounts, from synced data, at 18:00 / Sundays 19:00 in each device's time zone. Decided differently from the plan below:
+- **The switches stay per device**, stored on the device's push subscription (as the Android app's are per device, decided with the user earlier), not synced.
+- The friend events wait for Phase 7. Android keeps its local notifications.
+- Limits: 15 TMDB lookups and 30 notifications per run (free plan); titles in English; the recap's "coming up" counts one episode per show.
 
 - **iPhone/web:** Web Push. The service worker subscribes; the Worker stores the subscription and sends pushes. iOS needs 16.4+ and the app installed to the home screen.
 - **Android:** keep today's local notifications and `EpisodeCheckWorker` at first, since they work offline and don't need the server. Moving Android to server push (Firebase Cloud Messaging) can come later if useful.
@@ -341,7 +344,7 @@ People's watch history and lists are **not** visible on the admin page. It shows
 4. Phase 5: TMDB proxy (so online accounts need no token); can be built alongside Phase 3
 5. Phase 8 (part 1): admin page with users, invites, limits and kill switch. **Done** (after Phase 4), with Web Push for sign-up requests.
 6. Phase 4: sync, then remove auto-backup and add the local-account backup reminder
-7. Phase 6: server notifications
+7. Phase 6: server notifications. **Done**
 8. Phase 7: friends
 9. Phase 8 (part 2): the rest of the admin page
 
