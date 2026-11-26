@@ -794,3 +794,51 @@ const SCREENS = {
     show('home');
   }
 })();
+
+// ---------- Laptop layout: the poster mosaic ----------
+
+// On laptops (the same test as style.css's laptop rules), the sign-in screens sit on the right
+// of a split layout with a mosaic of posters on the left (the design's browser layout). The
+// posters are this week's trending movies from the server (GET /v1/posters: just poster paths,
+// no sign-in needed), loaded from TMDB's image server. Without them (offline, the server's TMDB
+// switch off) the mosaic shows plain tiles instead.
+const LAPTOP_QUERY = '(min-width: 1024px) and (hover: hover) and (pointer: fine)';
+const MOSAIC_TILES = 24;
+
+function isLaptopLayout() {
+  const native = Boolean(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  return !native && Boolean(window.matchMedia && window.matchMedia(LAPTOP_QUERY).matches);
+}
+
+async function fillPosterMosaic() {
+  const mosaic = document.getElementById('auth-mosaic');
+  if (!mosaic || mosaic.dataset.filled || !isLaptopLayout()) return;
+  mosaic.dataset.filled = '1';
+  let posters = [];
+  try {
+    const response = await fetch(`${serverBaseUrl()}/v1/posters`);
+    if (response.ok) posters = ((await response.json()).posters || []).filter(p => typeof p === 'string');
+  } catch (error) { /* offline: plain tiles */ }
+  const grid = el('div', 'auth__mosaic-grid');
+  for (let i = 0; i < MOSAIC_TILES; i++) {
+    const tile = el('div', 'auth__mosaic-tile');
+    const path = posters.length ? posters[i % posters.length] : null;
+    if (path) {
+      const img = document.createElement('img');
+      img.src = `https://image.tmdb.org/t/p/w342${path}`;
+      img.alt = '';
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.addEventListener('error', () => img.remove());
+      tile.appendChild(img);
+    }
+    grid.appendChild(tile);
+  }
+  mosaic.appendChild(grid);
+}
+
+fillPosterMosaic();
+if (window.matchMedia) {
+  const laptop = window.matchMedia(LAPTOP_QUERY);
+  if (laptop.addEventListener) laptop.addEventListener('change', fillPosterMosaic);
+}

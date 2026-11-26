@@ -240,6 +240,7 @@ Online accounts (roadmap Phase 3) sign in with an **account key**, not a passwor
 | `DELETE /v1/sessions/:id` | yes | Signs one of the account's devices out |
 | `DELETE /v1/session` | yes | Signs this device out |
 | `GET /v1/tmdb/<TMDB path>` | yes | TMDB, asked with the owner's token (below) |
+| `GET /v1/posters` | no | `{ posters }`: poster paths of this week's trending movies, for the sign-in screens' mosaic on laptops. Edge-cached 12 h; on a cache miss it counts in the daily TMDB total and is limited to 30 an hour per address; empty when the TMDB switch is off |
 | `POST /v1/sync` | yes | Sends this device's changes and returns everyone else's (below) |
 | `GET /v1/push/key`, `PUT`/`DELETE /v1/push/subscription` | yes (key: no) | Web Push for this device: `PUT` takes `{ endpoint, keys, kinds: { requests, episodes, releases, recap }, timeZone, region }` ("Server notifications" below) |
 | `/v1/admin/...` | the admin | The admin page's API ("Admin and sign-ups" below) |

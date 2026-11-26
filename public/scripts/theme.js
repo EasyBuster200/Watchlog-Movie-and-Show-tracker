@@ -40,4 +40,9 @@
   };
   if (media && media.addEventListener) media.addEventListener('change', window.applyProfileTheme);
   window.applyProfileTheme();
+
+  // The Android app keeps the phone layout everywhere (style.css's laptop rules skip .is-native).
+  if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+    document.documentElement.classList.add('is-native');
+  }
 })();

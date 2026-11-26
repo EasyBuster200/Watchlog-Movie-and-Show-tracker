@@ -143,10 +143,90 @@ const NAV_ITEMS = [
   { id: 'profile', icon: 'user', label: 'Profile', href: 'profile.html' },
 ];
 
+// The Android app always keeps the phone layout, even on a large tablet: style.css's laptop
+// rules only apply without this class. (Capacitor's bridge is there before any page script.)
+function markNativeApp() {
+  const native = Boolean(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  document.documentElement.classList.toggle('is-native', native);
+}
+
+// The design's SideNav, which replaces the bottom bar on laptops (style.css shows one or the
+// other): the wordmark, a search field (Enter opens the search page), the six sections with
+// labels, and the profile with a settings button at the foot. Built next to the bottom nav by
+// renderBottomNav, so the two always agree on the active section.
+function renderSideNav(active) {
+  let side = document.querySelector('nav.tt-sidenav');
+  if (!side) {
+    side = el('nav', 'tt-sidenav');
+    side.setAttribute('aria-label', 'Main');
+    document.body.insertBefore(side, document.body.firstChild);
+    document.body.classList.add('has-sidenav');
+  }
+  side.innerHTML = '';
+
+  const brand = el('a', 'tt-sidenav__brand');
+  brand.href = 'main.html';
+  const mark = el('span', 'tt-sidenav__mark');
+  mark.innerHTML = ttIcon('play', { size: 14, filled: true });
+  brand.appendChild(mark);
+  brand.appendChild(document.createTextNode('Watchlog'));
+  side.appendChild(brand);
+
+  const form = el('form', 'tt-sidenav__search');
+  form.setAttribute('role', 'search');
+  const field = el('label', 'tt-search');
+  field.innerHTML = ttIcon('search', { size: 18 });
+  field.appendChild(el('span', 'tt-sr', 'Search'));
+  const input = document.createElement('input');
+  input.type = 'search';
+  input.placeholder = 'Search movies and shows…';
+  input.autocomplete = 'off';
+  input.enterKeyHint = 'search';
+  const current = new URLSearchParams(window.location.search).get('q');
+  if (current && /search(\.html)?$/.test(window.location.pathname)) input.value = current;
+  field.appendChild(input);
+  form.appendChild(field);
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    const q = input.value.trim();
+    if (q) window.location.href = `search.html?q=${encodeURIComponent(q)}`;
+  });
+  side.appendChild(form);
+
+  const items = el('div', 'tt-sidenav__items');
+  NAV_ITEMS.forEach(item => {
+    const on = item.id === active;
+    const link = el('a', `tt-sidenav__item${on ? ' tt-sidenav__item--on' : ''}`);
+    link.href = item.href;
+    if (on) link.setAttribute('aria-current', 'page');
+    link.innerHTML = ttIcon(item.icon, { size: 20, strokeWidth: on ? 2 : 1.8 });
+    link.appendChild(document.createTextNode(item.label));
+    items.appendChild(link);
+  });
+  side.appendChild(items);
+
+  const profile = typeof getActiveProfile === 'function' ? getActiveProfile() : null;
+  if (profile) {
+    const foot = el('div', 'tt-sidenav__foot');
+    const me = el('a', 'tt-sidenav__me');
+    me.href = 'profile.html';
+    me.appendChild(el('span', 'tt-sidenav__avatar', profile.displayName.trim().charAt(0).toUpperCase()));
+    me.appendChild(el('span', 'tt-sidenav__name', profile.displayName));
+    foot.appendChild(me);
+    const settings = el('a', 'tt-btn tt-btn--ghost tt-btn--icon tt-sidenav__settings');
+    settings.href = 'settings.html';
+    settings.setAttribute('aria-label', 'Settings');
+    settings.innerHTML = ttIcon('more', { size: 20 });
+    foot.appendChild(settings);
+    side.appendChild(foot);
+  }
+}
+
 // Every page has an empty <nav class="tt-nav" data-active="..."> - filled in here so the six
-// icons are defined once.
+// icons are defined once. It also (re)builds the laptop sidebar to match.
 function renderBottomNav(nav) {
   const active = nav.dataset.active;
+  renderSideNav(active);
   nav.setAttribute('aria-label', 'Main');
   nav.innerHTML = '';
   NAV_ITEMS.forEach(item => {
@@ -172,6 +252,7 @@ function initBackButton(button) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  markNativeApp();
   document.querySelectorAll('nav.tt-nav[data-active]').forEach(renderBottomNav);
   document.querySelectorAll('[data-back]').forEach(initBackButton);
 });

@@ -16,7 +16,7 @@
 //   the app strips adult titles itself, as it does for direct calls.
 
 import { route, ApiError } from '../router.js';
-import { requireAuth, rateLimit } from '../auth.js';
+import { requireAuth, rateLimit, clientKey } from '../auth.js';
 import { getSettings, DEFAULT_TMDB_DAILY_CAP } from '../settings.js';
 
 const TMDB_API = 'https://api.themoviedb.org/3';
@@ -107,6 +107,56 @@ route('GET', '/tmdb/*', async ({ request, env, ctx, params }) => {
 
   if (cache) {
     const stored = new Response(body, { headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${cacheSeconds(path)}` } });
+    ctx.waitUntil(cache.put(cacheKey, stored).catch(() => {}));
+  }
+  return jsonBody(body, 200);
+});
+
+// The sign-in screens' poster mosaic on laptops (profile-picker.js): GET /v1/posters, no
+// sign-in, answers only the poster paths of this week's trending movies ({ posters: [...] }),
+// which the browser then loads from TMDB's public image server. It's one TMDB request per data
+// centre every POSTERS_CACHE_SECONDS (edge cache, keyed by the TMDB address), so a stranger
+// can't use it to spend the owner's quota: on a cache miss it also counts against the overall
+// daily cap and a per-address limit, and the TMDB switches pause it like the proxy.
+export const POSTERS_CACHE_SECONDS = 12 * 3600;
+export const POSTERS_PER_ADDRESS_PER_HOUR = 30;
+const POSTERS_SOURCE = `${TMDB_API}/trending/movie/week?language=en-US`;
+
+route('GET', '/posters', async ({ request, env, ctx }) => {
+  const settings = await getSettings(env);
+  if (String(env.TMDB_PROXY || 'on').toLowerCase() === 'off' || settings.tmdbProxy === 'off' || !env.TMDB_TOKEN) {
+    return jsonBody(JSON.stringify({ posters: [] }), 200);
+  }
+  const cacheKey = new Request(POSTERS_SOURCE);
+  const cache = edgeCache();
+  if (cache) {
+    try {
+      const hit = await cache.match(cacheKey);
+      if (hit) return jsonBody(await hit.text(), 200, { 'X-Watchlog-Cache': 'hit' });
+    } catch (error) { /* only costs a TMDB request */ }
+  }
+
+  await rateLimit(env, `posters:${await clientKey(request)}`, POSTERS_PER_ADDRESS_PER_HOUR, 3600);
+  await rateLimit(env, 'tmdb:all', settings.tmdbDailyCap, DAY);
+
+  let data;
+  try {
+    const upstream = await fetch(POSTERS_SOURCE, {
+      headers: { accept: 'application/json', Authorization: `Bearer ${env.TMDB_TOKEN}` },
+      signal: AbortSignal.timeout(TMDB_TIMEOUT_MS),
+    });
+    if (!upstream.ok) return jsonBody(JSON.stringify({ posters: [] }), 200);
+    data = await upstream.json();
+  } catch (error) {
+    return jsonBody(JSON.stringify({ posters: [] }), 200);
+  }
+  const posters = (data.results || [])
+    .filter(movie => movie && !movie.adult && typeof movie.poster_path === 'string' && /^\/[A-Za-z0-9_\-.]+$/.test(movie.poster_path))
+    .map(movie => movie.poster_path)
+    .slice(0, 24);
+  const body = JSON.stringify({ posters });
+  if (cache && posters.length) {
+    const stored = new Response(body, { headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${POSTERS_CACHE_SECONDS}` } });
     ctx.waitUntil(cache.put(cacheKey, stored).catch(() => {}));
   }
   return jsonBody(body, 200);
