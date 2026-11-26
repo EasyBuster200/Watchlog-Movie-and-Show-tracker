@@ -32,13 +32,17 @@
   <!-- Every screen (Who's watching?, the offline profile form, Import a backup, and the online
        account screens) is drawn into #auth by profile-picker.js; the TMDB credit stays below. -->
   <main class="auth">
-    <div class="auth__col" id="auth"></div>
-    <footer class="auth__credit">
-      <a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer">
-        <img src="images/tmdb-logo.svg" alt="TMDB">
-      </a>
-      <p>This app uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB. Each profile uses its own TMDB API key. Get a free one at <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener noreferrer">themoviedb.org</a>.</p>
-    </footer>
+    <!-- Laptops only (style.css): a mosaic of this week's trending posters beside the form. -->
+    <aside class="auth__mosaic" id="auth-mosaic" aria-hidden="true"></aside>
+    <div class="auth__panel">
+      <div class="auth__col" id="auth"></div>
+      <footer class="auth__credit">
+        <a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer">
+          <img src="images/tmdb-logo.svg" alt="TMDB">
+        </a>
+        <p>This app uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB. Each profile uses its own TMDB API key. Get a free one at <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener noreferrer">themoviedb.org</a>.</p>
+      </footer>
+    </div>
     <input type="file" id="import-backup-input" accept="application/json,.json" hidden>
   </main>
 </body>

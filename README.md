@@ -188,7 +188,9 @@ every device you sign in on (phone, tablet, laptop), and you **don't need a TMDB
 ## How to use it
 
 The bar at the bottom of the screen has six tabs: **Home**, **Watchlist**, **Lists**,
-**Movies**, **Shows** and **Profile**.
+**Movies**, **Shows** and **Profile**. On a laptop, in the browser, they're in a sidebar on the
+left instead, with a search box above them and your profile and Settings at the bottom; posters
+fill the width of the window, and a title's cast sits beside its details.
 
 ### Find something
 

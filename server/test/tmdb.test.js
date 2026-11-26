@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../src/index.js';
-import { TMDB_LIMITS } from '../src/routes/tmdb.js';
+import { TMDB_LIMITS, POSTERS_PER_ADDRESS_PER_HOUR } from '../src/routes/tmdb.js';
 import { createEnv, createCtx, ORIGIN } from './helpers.js';
 
 // TMDB itself, stubbed: records every request the Worker makes, answers with `reply`.
@@ -168,5 +168,55 @@ test('answers are reused from the edge cache when one is available', async () =>
   } finally {
     tmdb.restore();
     delete globalThis.caches;
+  }
+});
+
+// --- GET /v1/posters (the sign-in screens' mosaic) ----------------------------------------------
+
+test('posters: no sign-in needed, only poster paths come back, adult and odd paths dropped', async () => {
+  const env = tmdbEnv();
+  const tmdb = stubTmdb(() => new Response(JSON.stringify({ results: [
+    { id: 1, poster_path: '/a1.jpg', title: 'One', overview: 'secret plot' },
+    { id: 2, poster_path: null },
+    { id: 3, poster_path: '/b2.jpg', adult: true },
+    { id: 4, poster_path: '/../evil' },
+    { id: 5, poster_path: '/c3.jpg' },
+  ] }), { status: 200 }));
+  try {
+    const res = await api(env, 'GET', '/v1/posters');
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body, { posters: ['/a1.jpg', '/c3.jpg'] });
+    assert.equal(tmdb.calls.length, 1);
+    assert.equal(new URL(tmdb.calls[0].url).pathname, '/3/trending/movie/week');
+    assert.equal(tmdb.calls[0].headers.Authorization, 'Bearer owner-token');
+    assert.ok(!JSON.stringify(res.body).includes('owner-token'));
+  } finally {
+    tmdb.restore();
+  }
+});
+
+test('posters: paused or failing TMDB just gives an empty mosaic', async () => {
+  const tmdb = stubTmdb(() => new Response('{}', { status: 500 }));
+  try {
+    assert.deepEqual((await api(tmdbEnv({ TMDB_PROXY: 'off' }), 'GET', '/v1/posters')).body, { posters: [] });
+    assert.equal(tmdb.calls.length, 0);
+    assert.deepEqual((await api(tmdbEnv(), 'GET', '/v1/posters')).body, { posters: [] });
+    assert.deepEqual((await api(createEnv({ TMDB_PROXY: 'on' }), 'GET', '/v1/posters')).body, { posters: [] });
+  } finally {
+    tmdb.restore();
+  }
+});
+
+test('posters: limited per address on cache misses', async () => {
+  const env = tmdbEnv();
+  const tmdb = stubTmdb(() => new Response(JSON.stringify({ results: [] }), { status: 200 }));
+  try {
+    for (let i = 0; i < POSTERS_PER_ADDRESS_PER_HOUR; i++) {
+      assert.equal((await api(env, 'GET', '/v1/posters', { ip: '198.51.100.7' })).status, 200);
+    }
+    assert.equal((await api(env, 'GET', '/v1/posters', { ip: '198.51.100.7' })).status, 429);
+    assert.equal((await api(env, 'GET', '/v1/posters', { ip: '198.51.100.8' })).status, 200);
+  } finally {
+    tmdb.restore();
   }
 });
