@@ -24,6 +24,9 @@
 // The new copy is written first and the oldest are deleted only after, so a failed run never
 // leaves fewer copies than before. BACKUPS_TO_KEEP copies are kept, of either kind.
 
+// The Cron Trigger that runs the backup (wrangler.jsonc); index.js tells it from the hourly one.
+export const BACKUP_CRON = '0 3 * * SUN';
+
 export const BACKUP_PREFIX = 'd1/';
 export const BACKUPS_TO_KEEP = 5;
 export const BACKUP_FORMAT = 'watchlog-d1-backup';

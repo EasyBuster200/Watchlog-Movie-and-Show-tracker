@@ -166,8 +166,51 @@ function settingsSection(title, rows) {
   return section;
 }
 
-// Notifications only exist in the Android app; changing one reschedules everything.
+// Notifications: the Android app schedules its own (notifications.js; changing one reschedules
+// everything). In the web app the server sends them, to online accounts only: each switch
+// turns that kind on for this device (serverApi.js's setDevicePush).
+const NOTIFICATION_KINDS = [
+  { pref: 'notifyEpisodes', kind: 'episodes', label: 'New episodes', sub: 'When a show you track airs a new episode' },
+  { pref: 'releaseReminders', kind: 'releases', label: 'Release reminders', sub: 'Movies on your Watchlist, on release day' },
+  { pref: 'weeklyRecap', kind: 'recap', label: 'Weekly recap', sub: 'What you watched and what is coming up, Sundays at 19:00' },
+];
+
+// Why the web app can't turn notifications on here, or null when it can.
+function webNotificationsBlocker(profile) {
+  if (!webPushSupported()) return "This browser can't show notifications.";
+  if (onIphoneBrowserTab()) return 'Add Watchlog to your Home Screen (Share → Add to Home Screen) and open it from there.';
+  if (!profile.account) return 'In the web app, notifications need an online account. The Android app has them for every profile.';
+  if (!isSignedIn(profile)) return 'Sign in to your online account again to get them.';
+  if (Notification.permission === 'denied') return 'Notifications are blocked for this site. Allow them in the browser or phone settings.';
+  return null;
+}
+
+function webNotificationRows(profile) {
+  const blocker = webNotificationsBlocker(profile);
+  const kinds = devicePushKinds(profile);
+  const granted = typeof Notification !== 'undefined' && Notification.permission === 'granted';
+  const rows = NOTIFICATION_KINDS.map(({ kind, label, sub }) => {
+    const row = settingsRow({
+      label,
+      sub,
+      switchOn: !blocker && granted && kinds[kind],
+      disabled: Boolean(blocker),
+      onSwitch: async on => {
+        try {
+          await setDevicePush(profile, { [kind]: on });
+        } catch (error) {
+          row.querySelector('.tt-switch').setOn(!on);
+          await confirmDialog({ title: "Couldn't change notifications", message: error.message || 'Try again.', confirmLabel: 'OK', cancelLabel: 'Close' });
+        }
+      },
+    });
+    return row;
+  });
+  return blocker ? [settingsRow({ label: 'Not available here', sub: blocker }), ...rows] : rows;
+}
+
 function notificationRows(current) {
+  if (!isNativeAppPlatform()) return webNotificationRows(user);
   const supported = notificationsSupported();
   const note = text => (supported ? text : 'Available in the Android app');
   const toggle = key => async on => {
@@ -282,6 +325,7 @@ async function chooseRegion() {
   savePrefs({ region: value });
   renderSections();
   refreshEpisodeNotifications({ force: true }).catch(() => {});
+  refreshDevicePush(user).catch(() => {});
 }
 
 async function chooseLanguage() {

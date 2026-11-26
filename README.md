@@ -63,7 +63,7 @@ ideas:
   progress and the next episode to watch.
 - **Airing Soon, with a calendar.** Every announced upcoming episode of the shows you follow,
   day by day, with a strip of upcoming days on top so you can see what's coming at a glance.
-- **Notifications** (Android app). A notification at 6 pm on the day a new episode of one of your shows comes
+- **Notifications** (Android app, and the web app with an online account). A notification at 6 pm on the day a new episode of one of your shows comes
   out (it works even if you don't open the app for a while), a reminder when a movie on your
   Watchlist is released in your country, and an optional weekly recap every Sunday evening.
 - **Knows when you've moved on.** Shows you're caught up on wait quietly until new episodes come
@@ -91,8 +91,8 @@ Watchlog comes two ways, and they're the same app:
 
 - an **Android app** (Android 5.1 or newer), and
 - a **web app** for **iPhone** (or any other phone or computer) that you add to your Home Screen,
-  so it opens like any other app. It doesn't need the App Store. It doesn't have notifications
-  or automatic backups yet.
+  so it opens like any other app. It doesn't need the App Store. It has notifications with an
+  [online account](#an-online-account-optional), but no automatic backups.
 
 Setting it up takes three steps: get a free TMDB key (about 5 minutes, once), install the app,
 and create your profile.
@@ -231,7 +231,8 @@ aired yet can't be marked.
 - **Airing Soon** (on **Home**) shows the next episodes of the shows you follow. Tap **See all**
   for the full schedule: a strip of upcoming days on top (days with new episodes show how many;
   tap one to jump to it) and every announced episode listed below.
-- **Notifications** (Android app): on the day a new episode airs, you get a notification at 6 pm.
+- **Notifications:** on the day a new episode airs, you get a notification at 6 pm (in the web
+  app, with an online account).
   Tap it to open the show. Turn them on or off in [Settings](#settings).
 
 How Watchlog sorts your shows:
@@ -279,7 +280,8 @@ your profile only, so each person on the phone can set it up their own way.
 - **Your name and TMDB token:** tap the card at the top to change them.
 - **Appearance:** *Dark*, *Light* or *Match device* (follows your phone's setting), and seven
   accent colours.
-- **Notifications** (Android app only for now):
+- **Notifications** (the Android app, or the web app with an online account; on iPhone, open
+  Watchlog from your Home Screen, iOS 16.4 or newer, and allow notifications when asked):
   - **New episodes:** 6 pm on the day a new episode of a show you follow airs.
   - **Release reminders:** 6 pm on the day a movie on your Watchlist is released in your
     country (in cinemas, or to stream or buy if it isn't released in cinemas there).
@@ -386,7 +388,9 @@ it, not the short "API Key". If Watchlog says it looks like the short API Key, g
 Watchlog needs internet to fetch movie and show information (your own data is always available).
 
 **I'm not getting notifications:**
-- Notifications are only in the Android app for now; the iPhone web app doesn't have them yet.
+- In the web app (iPhone or a browser), notifications need an **online account**, and on
+  iPhone Watchlog must be opened from the Home Screen. Settings → Notifications says what's
+  missing. They're sent within the hour, so they can arrive a little after 6 pm.
 - Check they're on in **Settings → Notifications**.
 - Check Android allows them: **Settings → Apps → Watchlog → Notifications** (your phone's
   settings, not Watchlog's).

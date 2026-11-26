@@ -23,7 +23,8 @@
         "dev",
         "--local",
         "--port",
-        "8787"
+        "8787",
+        "--test-scheduled"
       ],
       "port": 8787
     }

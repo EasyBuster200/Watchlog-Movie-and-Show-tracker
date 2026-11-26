@@ -262,7 +262,7 @@ test('the weekly cleanup removes expired sessions and codes and old rate-limit c
   assert.ok(counters > 0);
   const later = new Date(Date.now() + 200 * 24 * 3600 * 1000);
   const result = await runCleanup(env, later);
-  assert.deepEqual(result, { sessions: 1, pairingCodes: 1, rateLimits: counters });
+  assert.deepEqual(result, { sessions: 1, pairingCodes: 1, rateLimits: counters, pushLog: 0, titles: 0 });
   assert.equal(rows(env, 'SELECT * FROM rate_limits').length, 0);
   assert.equal(rows(env, 'SELECT * FROM accounts').length, 1, 'accounts are kept');
 });

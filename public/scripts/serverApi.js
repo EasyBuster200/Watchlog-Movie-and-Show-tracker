@@ -262,6 +262,7 @@ function signOutAccountDevice(profile, sessionId) {
 // Signs this device out and turns the profile back into an offline one. The library stays.
 // The profile is unlinked even if the server can't be reached or already signed it out.
 async function signOutOnlineAccount(profile) {
+  forgetDevicePush(profile);
   try {
     if (isSignedIn(profile)) await accountRequest(profile, 'DELETE', '/v1/session');
   } catch (error) {
@@ -274,5 +275,111 @@ async function signOutOnlineAccount(profile) {
 // offline profile with its library.
 async function deleteOnlineAccount(profile) {
   await accountRequest(profile, 'DELETE', '/v1/account');
+  forgetDevicePush(profile);
   return unlinkProfileAccount(profile.id);
+}
+
+// ---------- Notifications on this device (Web Push, roadmap Phase 6) ----------
+// The web app gets its notifications from the server (server/src/notifications.js): this
+// browser subscribes to Web Push for one signed-in online profile and tells the server which
+// kinds it wants (sign-up requests for the owner, new episodes, release reminders, the weekly
+// recap), its time zone (for 18:00 local time) and the profile's region (for release dates).
+// The switches are per device, like the Android app's (decided with the user), and are
+// remembered here in localStorage (PUSH_DEVICE_KEY). A browser has one push subscription, so
+// it notifies one account: turning notifications on for another profile moves it there.
+// The Android app keeps its own local notifications (notifications.js) and never subscribes.
+
+const PUSH_DEVICE_KEY = 'watchlog_push_device';
+const PUSH_KIND_NAMES = ['requests', 'episodes', 'releases', 'recap'];
+
+function webPushSupported() {
+  return typeof navigator !== 'undefined' && 'serviceWorker' in navigator && typeof window !== 'undefined' &&
+    'PushManager' in window && 'Notification' in window && !isNativeAppPlatform();
+}
+
+// iPhone only lets an app added to the Home Screen receive notifications.
+function onIphoneBrowserTab() {
+  const ios = /iPhone|iPad/.test(navigator.userAgent);
+  const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone;
+  return ios && !standalone;
+}
+
+function readPushDevice() {
+  try {
+    return JSON.parse(localStorage.getItem(PUSH_DEVICE_KEY)) || null;
+  } catch (error) {
+    return null;
+  }
+}
+
+// What this device has switched on for this profile (all off for any other profile).
+function devicePushKinds(profile) {
+  const record = readPushDevice();
+  const kinds = {};
+  PUSH_KIND_NAMES.forEach(kind => {
+    kinds[kind] = Boolean(record && profile && record.profileId === profile.id && record.kinds && record.kinds[kind]);
+  });
+  return kinds;
+}
+
+function forgetDevicePush(profile) {
+  const record = readPushDevice();
+  if (record && profile && record.profileId === profile.id) localStorage.removeItem(PUSH_DEVICE_KEY);
+}
+
+function deviceTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function pushKeyBytes(base64Url) {
+  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (base64Url.length % 4)) % 4);
+  return Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+}
+
+// Turns kinds on or off for this device ({ episodes: true }, ...); asks for permission when
+// something is on. With everything off the subscription is removed. Resolves the kinds now on;
+// throws (with a message to show) if it couldn't.
+async function setDevicePush(profile, changes) {
+  const kinds = { ...devicePushKinds(profile), ...changes };
+  const registration = await navigator.serviceWorker.ready;
+  let subscription = await registration.pushManager.getSubscription();
+  if (!PUSH_KIND_NAMES.some(kind => kinds[kind])) {
+    if (subscription) {
+      await accountRequest(profile, 'DELETE', '/v1/push/subscription', { endpoint: subscription.endpoint }).catch(() => {});
+      await subscription.unsubscribe().catch(() => {});
+    }
+    localStorage.removeItem(PUSH_DEVICE_KEY);
+    return kinds;
+  }
+  const { publicKey } = await serverRequest('GET', '/v1/push/key');
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') throw new Error('Notifications are blocked for this site. Allow them in the browser or phone settings.');
+  if (!subscription) {
+    subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: pushKeyBytes(publicKey) });
+  }
+  const details = { timeZone: deviceTimeZone(), region: typeof profileRegion === 'function' ? profileRegion(profile) : null };
+  await accountRequest(profile, 'PUT', '/v1/push/subscription', { ...subscription.toJSON(), kinds, ...details });
+  localStorage.setItem(PUSH_DEVICE_KEY, JSON.stringify({ profileId: profile.id, kinds, ...details }));
+  return kinds;
+}
+
+// Keeps the server's time zone and region for this device current (travel, a new Region in
+// Settings). Cheap when nothing changed: no request at all.
+async function refreshDevicePush(profile = typeof getActiveProfile === 'function' ? getActiveProfile() : null) {
+  const record = readPushDevice();
+  if (!record || !profile || record.profileId !== profile.id || !isSignedIn(profile) || !webPushSupported()) return;
+  if (Notification.permission !== 'granted') return;
+  const region = typeof profileRegion === 'function' ? profileRegion(profile) : null;
+  if (record.timeZone === deviceTimeZone() && record.region === region) return;
+  await setDevicePush(profile, {});
+}
+
+if (typeof window !== 'undefined' && typeof navigator !== 'undefined' && navigator.serviceWorker && window.addEventListener) {
+  window.addEventListener('load', () => {
+    setTimeout(() => refreshDevicePush().catch(error => console.warn('Updating notifications failed:', error)), 3000);
+  });
 }
