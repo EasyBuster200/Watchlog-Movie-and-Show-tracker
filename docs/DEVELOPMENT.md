@@ -375,12 +375,27 @@ Both are named in `wrangler.jsonc`, and the preview one also in `wrangler.previe
 - **Backups:** D1's [Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/) can
   restore the database to any minute of the last 7 days. On top of that, every Sunday at 03:00 UTC
   the Worker's Cron Trigger copies the whole database to the R2 bucket `BACKUPS`
-  (`server/src/backup.js`) as `d1/watchlog-<time>.json`, keeping the newest 5. The new copy is
-  written before old ones are deleted. Crons don't run in previews.
-- **Restoring a weekly copy:** download it from the R2 bucket in the dashboard, then
-  `node tools/backup-to-sql.js <file>.json > restore.sql` and
-  `npx wrangler d1 execute watchlog --remote --file restore.sql`, into an empty database (a new
-  one, or after dropping the tables). For anything within the last week, Time Travel is simpler:
+  (`server/src/backup.js`), keeping the newest 5. The new copy is written before old ones are
+  deleted. Crons don't run in previews.
+  - **How:** the Worker asks D1 to export the database (the same export `wrangler d1 export`
+    uses), waits for it, and streams the finished file into R2 as `d1/watchlog-<time>.sql`.
+    Cloudflare builds the file, so the run uses almost none of the free plan's 10 ms of CPU per
+    Cron run, however big the database gets. While it exports, D1 holds other requests (seconds
+    at this size): the app saves everything on the device first and syncs it afterwards, so
+    nothing is lost.
+  - **Setup (once):** in the Cloudflare dashboard, My Profile → API Tokens → Create Token →
+    Custom token, with the permission **Account · D1 · Edit**, for your account only. Add it to
+    the `watchlog` Worker as a secret named `BACKUP_API_TOKEN` (Settings → Variables and
+    Secrets, **Production** only; previews don't back up). `BACKUP_DATABASE_ID` is already in
+    `wrangler.jsonc` (a test keeps it equal to the production database). If the token can see more
+    than one account, also add a `BACKUP_ACCOUNT_ID` variable (the id in the dashboard's address).
+  - **Without the token** it still backs up, the old way: the Worker builds a JSON copy itself
+    (`d1/watchlog-<time>.json`), which a big database will make it run out of CPU on. The log
+    then says so.
+- **Restoring a weekly copy:** download it from the R2 bucket in the dashboard. A `.sql` copy
+  loads as it is: `npx wrangler d1 execute watchlog --remote --file <file>.sql`. A `.json` copy
+  (made without the token) first needs `node tools/backup-to-sql.js <file>.json > restore.sql`.
+  Either goes into an empty database (a new one, or after dropping the tables). For anything within the last week, Time Travel is simpler:
   `npx wrangler d1 time-travel restore watchlog --timestamp <time>`.
 
 #### Server tests

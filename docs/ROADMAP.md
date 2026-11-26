@@ -151,7 +151,8 @@ Sign-up is **open for now** (decided with the user): creating accounts is rate-l
 **How it was built** differs from the plan below in a few places: one `POST /v1/sync` both sends and receives (not separate push and pull); record keys are `550` (watched movie), `1399:1:1` (episode), `movie:550` (favourite), the list's sync id, and `<list sync id>:movie:550` (list item); the notification switches don't sync (decided with the user). From "Effects on the rest of the app", decided differently: **only online profiles** stop auto-backing up (their library is on the account); offline Android profiles keep the weekly file, since nothing else protects them.
 
 **Also decided with the user:** a page the person hasn't touched reloads itself when changes arrive (a touched one shows a Refresh notice); a copy kept at sign-out stays a separate offline profile, and signing in again starts from the account; changes are stamped with the server's clock (each sync reply carries `serverTime`), so a device with a wrong clock still has its newest change win.
-**Open problem before real data:** the weekly R2 backup (`server/src/backup.js`) dumps the whole database in one Cron run, and the free plan gives a Cron run 10 ms of CPU. With synced libraries in `sync_records` that will likely run out (D1 Time Travel still covers 7 days). Options: back up in pieces across several runs, or export with `wrangler d1 export` from a scheduled GitHub Action (no CPU limit) and upload that to R2.
+
+**Backups and the CPU limit (solved):** the weekly R2 backup used to build the dump inside the Worker, which would outgrow the free plan's 10 ms of CPU per Cron run once synced libraries fill `sync_records`. It now asks D1 to export the database and only streams the finished file into R2 (decided with the user, over a GitHub Action or a backup split across runs). It needs the `BACKUP_API_TOKEN` secret (`docs/DEVELOPMENT.md`, "Server database").
 
 ### Rules
 
