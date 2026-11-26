@@ -4,9 +4,28 @@
     {
       "name": "tvtimeclone",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["serve", "public", "-l", "3000", "-c", "../serve.json"],
+      "runtimeArgs": [
+        "serve",
+        "public",
+        "-l",
+        "3000",
+        "-c",
+        "../serve.json"
+      ],
       "port": 3000,
       "autoPort": true
+    },
+    {
+      "name": "watchlog-worker",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "wrangler",
+        "dev",
+        "--local",
+        "--port",
+        "8787"
+      ],
+      "port": 8787
     }
   ]
 }

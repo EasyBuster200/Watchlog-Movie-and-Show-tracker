@@ -881,3 +881,18 @@ button.settings-row:disabled { cursor: default; opacity: 0.5; background: none; 
 .actor-head__dept:empty, .actor-head__line:empty { display: none; }
 .actor-head__line { font-size: 13px; line-height: 19px; color: var(--text-secondary); }
 .clamp--3 { -webkit-line-clamp: 3; }
+
+/* ---------- Sync toast (sync.js: changes arrived from the account's other devices) ---------- */
+.sync-toast {
+  position: fixed; left: var(--space-4); right: var(--space-4); z-index: 60;
+  bottom: calc(72px + env(safe-area-inset-bottom));
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  max-width: 480px; margin: 0 auto; padding: var(--space-3) var(--space-4);
+  background: var(--bg-raised); color: var(--text-primary);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-poster);
+}
+.sync-toast button {
+  background: none; border: 0; padding: var(--space-1) var(--space-2);
+  color: var(--accent-text); font: inherit; font-weight: 600; cursor: pointer;
+}

@@ -46,6 +46,7 @@ const PRECACHE = [
   'scripts/localApi.js',
   'scripts/profiles.js',
   'scripts/serverApi.js',
+  'scripts/sync.js',
   'scripts/backup.js',
   'scripts/autoBackup.js',
   'scripts/notifications.js',

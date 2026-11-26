@@ -132,12 +132,6 @@ function openProfileFromList(profile) {
     return;
   }
   if (!profile.account && !profile.tmdbApiKey) {
-    // A copy kept when signing out: signing in again reattaches it (profileForAccount).
-    if (profile.formerAccountId && ONLINE_ACCOUNTS) {
-      setActiveProfileId(profile.id);
-      show('signin');
-      return;
-    }
     show('offline', { profile, notice: 'To use this profile offline, add your own TMDB token.' });
     return;
   }
@@ -389,9 +383,10 @@ function openProfile(profileId, next = 'main.html') {
   window.location.href = next;
 }
 
-// After a sign-in (key or code): the account's existing profile on this device, if any, just
-// gets the new session; otherwise a new profile is made for it (named after the account, no TMDB
-// token needed), or the backup being restored becomes that profile.
+// After a sign-in (key or code): the account's profile on this device, if it has one (signed out
+// by the server), just gets the new session; otherwise a new profile is made for it (named after
+// the account, no TMDB token needed), or the backup being restored becomes that profile. A copy
+// kept at sign-out stays a separate offline profile.
 async function afterSignIn(signIn, { accountKey = null, restore = null } = {}) {
   const existing = profileForAccount(signIn.account.id);
   if (existing && !restore) {

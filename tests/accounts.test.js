@@ -198,18 +198,24 @@ test("an online profile's TMDB requests go through the server, and a signed-out 
   assert.deepEqual(app.tmdbCalls, ['/movie/550']);
 });
 
-test('signing in again reattaches a copy kept at sign-out, instead of adding another profile', async () => {
+test('a copy kept at sign-out is a separate offline profile: signing in again does not reuse it', async () => {
   const app = createApp({ server: fakeServer({ 'DELETE /v1/session': { status: 204 } }) });
   await app.api('POST', '/api/watched/movies/1', { title: 'Kept' });
   const id = app.run('getActiveProfileId()');
   app.run(`linkProfileToAccount('${id}', ${JSON.stringify(signInReply().body)})`);
   await app.run('signOutOnlineAccount(getActiveProfile())');
-  assert.equal(app.run('getActiveProfile().formerAccountId'), 'acc-1');
-  assert.equal(app.run("profileForAccount('acc-1').id"), id, 'the kept copy is found for that account');
+  assert.equal(app.run('getActiveProfile().account'), null);
+  assert.equal(app.run("profileForAccount('acc-1')"), null, 'the kept copy is not the account\'s profile any more');
+  assert.equal((await app.getAll('watched_movies')).length, 1, 'it keeps its library');
+});
 
+test('a device the server signed out gets its session back on the same profile', async () => {
+  const app = createApp();
+  const id = app.run('getActiveProfileId()');
+  app.run(`linkProfileToAccount('${id}', ${JSON.stringify(signInReply().body)})`);
+  app.run(`updateProfile('${id}', { account: { ...getActiveProfile().account, sessionToken: null } })`);
+  assert.equal(app.run("profileForAccount('acc-1').id"), id);
   app.run(`linkProfileToAccount('${id}', ${JSON.stringify(signInReply({ token: 'token-2' }).body)})`);
   assert.equal(activeAccount(app).sessionToken, 'token-2');
-  assert.equal(app.run('getActiveProfile().formerAccountId'), null);
   assert.equal(app.run('getProfiles().length'), 1);
-  assert.equal((await app.getAll('watched_movies')).length, 1, 'with its library');
 });
