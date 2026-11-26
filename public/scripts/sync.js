@@ -393,6 +393,7 @@ async function runSync() {
       const offset = measureClockOffset(reply.serverTime, sentAt, Date.now());
       if (offset !== null) state = { ...state, clockOffsetMs: offset };
       if (round === 0) noteAdminNews(profile, reply.admin);
+      if (round === 0) noteRecovery(profile, reply.recovery);
       received += await applyIncomingChanges(db, reply.changes || [], profile);
       await clearSentChanges(db, batch);
       sent += batch.length;
@@ -419,6 +420,50 @@ function noteAdminNews(profile, admin) {
   if (!current || !current.account) return;
   if (admin) updateAccountFields(profile.id, { isAdmin: true, pendingRequests: Number(admin.pendingRequests) || 0 });
   else if (current.account.isAdmin) updateAccountFields(profile.id, { isAdmin: false, pendingRequests: 0 });
+}
+
+// Someone recovering this account with its email (recovery.js on the server): every signed-in
+// device hears about it on each sync, and shows "Not you? Cancel" until it's over.
+function noteRecovery(profile, recovery) {
+  const current = getProfiles().find(p => p.id === profile.id);
+  if (!current || !current.account) return;
+  const next = recovery && recovery.completesAt ? { completesAt: recovery.completesAt } : null;
+  const before = current.account.recovery || null;
+  if ((before && before.completesAt) !== (next && next.completesAt)) updateAccountFields(profile.id, { recovery: next });
+  if (next) showRecoveryWarning();
+}
+
+function showRecoveryWarning() {
+  if (typeof document === 'undefined' || !document.body || document.querySelector('.recovery-toast')) return;
+  document.querySelectorAll('.sync-toast').forEach(t => t.remove());
+  const toast = document.createElement('div');
+  toast.className = 'sync-toast recovery-toast';
+  toast.setAttribute('role', 'alert');
+  const text = document.createElement('span');
+  text.textContent = 'Someone is recovering your account';
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.textContent = 'Not you? Cancel';
+  cancel.addEventListener('click', async () => {
+    const profile = getActiveProfile();
+    if (!profile) return;
+    const ok = typeof confirmDialog === 'function' ? await confirmDialog({
+      title: 'Cancel the recovery?',
+      message: "A device asked to recover your account with a code sent to your email. If it wasn't you, cancel it and check that your email account is safe. Your account key stays the same.",
+      confirmLabel: 'Cancel the recovery',
+      cancelLabel: 'It was me',
+      danger: true,
+    }) : true;
+    if (!ok) return;
+    try {
+      await cancelAccountRecovery(profile);
+      toast.remove();
+    } catch (error) {
+      if (typeof confirmDialog === 'function') await confirmDialog({ title: "Couldn't cancel", message: error.message || 'Try again.', confirmLabel: 'OK', cancelLabel: 'Close' });
+    }
+  });
+  toast.append(text, cancel);
+  document.body.appendChild(toast);
 }
 
 function announceSync(detail) {

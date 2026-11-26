@@ -137,7 +137,7 @@ export async function requireAuth(request, env, { now = new Date(), allowPending
   if (!token) throw SIGNED_OUT();
   const row = await env.DB.prepare(
     `SELECT s.id AS session_id, s.device_name, s.created_at AS session_created_at, s.last_used_at, s.expires_at,
-            a.id AS account_id, a.display_name, a.created_at AS account_created_at, a.key_changed_at, a.status
+            a.id AS account_id, a.display_name, a.email, a.created_at AS account_created_at, a.key_changed_at, a.status
        FROM sessions s JOIN accounts a ON a.id = s.account_id
       WHERE s.token_hash = ?`
   ).bind(await hashSessionToken(token)).first();
@@ -154,7 +154,7 @@ export async function requireAuth(request, env, { now = new Date(), allowPending
       .bind(lastUsedAt, sessionExpiry(now), row.session_id).run();
   }
   return {
-    account: { id: row.account_id, displayName: row.display_name, createdAt: row.account_created_at, keyChangedAt: row.key_changed_at, status: row.status },
+    account: { id: row.account_id, displayName: row.display_name, email: row.email, createdAt: row.account_created_at, keyChangedAt: row.key_changed_at, status: row.status },
     session: { id: row.session_id, deviceName: row.device_name, createdAt: row.session_created_at, lastUsedAt },
   };
 }

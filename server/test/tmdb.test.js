@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../src/index.js';
 import { TMDB_LIMITS, POSTERS_PER_ADDRESS_PER_HOUR } from '../src/routes/tmdb.js';
-import { createEnv, createCtx, ORIGIN } from './helpers.js';
+import { createEnv, createCtx, ORIGIN, signupEmail } from './helpers.js';
 
 // TMDB itself, stubbed: records every request the Worker makes, answers with `reply`.
 function stubTmdb(reply = () => new Response(JSON.stringify({ id: 550, title: 'Fight Club' }), { status: 200 })) {
@@ -27,7 +27,7 @@ async function api(env, method, path, { token, body, ip = '203.0.113.1' } = {}) 
 }
 
 async function signedIn(env, ip) {
-  return (await api(env, 'POST', '/v1/accounts', { body: { displayName: 'Ana' }, ip })).body.token;
+  return (await api(env, 'POST', '/v1/accounts', { body: { displayName: 'Ana', ...(await signupEmail(env)) }, ip })).body.token;
 }
 
 const tmdbEnv = (overrides = {}) => createEnv({ TMDB_TOKEN: 'owner-token', TMDB_PROXY: 'on', ...overrides });

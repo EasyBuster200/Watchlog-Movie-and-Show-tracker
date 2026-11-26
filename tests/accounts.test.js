@@ -265,3 +265,71 @@ test("this device's notification switches belong to one profile and are forgotte
   await app.run('signOutOnlineAccount(getActiveProfile())');
   assert.equal(app.run('localStorage.getItem(PUSH_DEVICE_KEY)'), null);
 });
+
+test('sign-up sends the email and its code; the email is kept on the profile and can be changed', async () => {
+  const app = createApp({
+    server: fakeServer({
+      'POST /v1/email-codes': { body: { sent: true } },
+      'POST /v1/accounts': req => signInReply({ accountKey: KEY, account: { id: 'acc-1', displayName: req.body.displayName, email: req.body.email, status: 'active' } }),
+      'POST /v1/account/email-code': { body: { sent: true } },
+      'PUT /v1/account/email': req => ({ body: { account: { id: 'acc-1', displayName: 'Ana', email: req.body.email } } }),
+    }),
+  });
+  await app.call('requestSignupCode', 'ana@example.com');
+  assert.deepEqual(app.serverRequests.at(-1).body, { email: 'ana@example.com' });
+  const created = await app.call('createOnlineAccount', 'Ana', { email: 'ana@example.com', emailCode: '123456' });
+  assert.equal(app.serverRequests.at(-1).body.emailCode, '123456');
+  const id = app.run('getActiveProfileId()');
+  app.context.__created = created;
+  app.run(`linkProfileToAccount('${id}', __created)`);
+  assert.equal(activeAccount(app).email, 'ana@example.com');
+
+  await app.run("requestEmailChangeCode(getActiveProfile(), 'ana.new@example.com')");
+  await app.run("confirmEmailChange(getActiveProfile(), 'ana.new@example.com', '654321')");
+  assert.deepEqual(app.serverRequests.at(-1).body, { email: 'ana.new@example.com', code: '654321' });
+  assert.equal(activeAccount(app).email, 'ana.new@example.com');
+});
+
+test('a recovery is remembered on this device until it finishes or is cancelled', async () => {
+  let ready = false;
+  const app = createApp({
+    server: fakeServer({
+      'POST /v1/recovery/code': { body: { sent: true } },
+      'POST /v1/recovery': { status: 201, body: { recoveryToken: 'rec-1', completesAt: '2026-11-27T12:00:00.000Z', displayName: 'Ana' } },
+      'POST /v1/recovery/complete': () => (ready
+        ? signInReply({ accountKey: KEY })
+        : { status: 409, body: { error: 'recovery_waiting', message: 'Not yet.' } }),
+    }),
+  });
+  await app.call('requestRecoveryCode', 'ana@example.com');
+  const entry = await app.call('startRecovery', 'Ana@Example.com', '123456');
+  assert.deepEqual(app.serverRequests.at(-1).body, { email: 'Ana@Example.com', code: '123456', deviceName: 'Unknown device' });
+  assert.deepEqual(JSON.parse(JSON.stringify(app.run('pendingRecoveries()'))), [{ token: 'rec-1', email: 'ana@example.com', displayName: 'Ana', completesAt: '2026-11-27T12:00:00.000Z' }]);
+
+  await assert.rejects(app.call('completeRecovery', entry), err => err.code === 'recovery_waiting');
+  assert.equal(app.run('pendingRecoveries().length'), 1, 'still waiting');
+  ready = true;
+  const signIn = await app.call('completeRecovery', entry);
+  assert.equal(signIn.accountKey, KEY);
+  assert.equal(app.run('pendingRecoveries().length'), 0);
+
+  // A cancelled one is forgotten too.
+  const cancelled = createApp({ server: fakeServer({ 'POST /v1/recovery/complete': { status: 404, body: { error: 'recovery_cancelled', message: 'Cancelled.' } } }) });
+  cancelled.run(`saveRecoveries([{ token: 'rec-2', email: 'a@b.co', displayName: 'Ana', completesAt: '2026-11-27T12:00:00.000Z' }])`);
+  await assert.rejects(cancelled.run("completeRecovery(pendingRecoveries()[0])"), err => err.code === 'recovery_cancelled');
+  assert.equal(cancelled.run('pendingRecoveries().length'), 0);
+});
+
+test('a signed-in device learns about a recovery from sync, and can cancel it', async () => {
+  const app = createApp({ server: fakeServer({ 'DELETE /v1/account/recovery': { status: 204 } }) });
+  const id = app.run('getActiveProfileId()');
+  app.run(`linkProfileToAccount('${id}', ${JSON.stringify(signInReply().body)})`);
+  app.run("noteRecovery(getActiveProfile(), { completesAt: '2026-11-27T12:00:00.000Z' })");
+  assert.deepEqual(activeAccount(app).recovery, { completesAt: '2026-11-27T12:00:00.000Z' });
+  await app.run('cancelAccountRecovery(getActiveProfile())');
+  assert.equal(app.serverRequests.at(-1).method, 'DELETE');
+  assert.equal(activeAccount(app).recovery, null);
+  app.run("noteRecovery(getActiveProfile(), { completesAt: '2026-11-28T12:00:00.000Z' })");
+  app.run('noteRecovery(getActiveProfile(), undefined)');
+  assert.equal(activeAccount(app).recovery, null, 'cleared once the sync reply stops mentioning it');
+});

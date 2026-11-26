@@ -78,7 +78,7 @@ route('GET', '/admin/users', async ({ request, env }) => {
   await requireAdmin(request, env);
   const now = nowIso();
   const { results } = await env.DB.prepare(
-    `SELECT a.id, a.display_name AS displayName, a.status, a.created_at AS createdAt, a.request_note AS requestNote,
+    `SELECT a.id, a.display_name AS displayName, a.email, a.status, a.created_at AS createdAt, a.request_note AS requestNote,
             (SELECT MAX(last_used_at) FROM sessions s WHERE s.account_id = a.id) AS lastSeen,
             (SELECT COUNT(*) FROM sessions s WHERE s.account_id = a.id AND s.expires_at > ?) AS devices,
             (SELECT COUNT(*) FROM sync_records r WHERE r.account_id = a.id AND r.deleted = 0) AS records,

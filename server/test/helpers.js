@@ -7,6 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { issueEmailCode } from '../src/email.js';
 
 export const MIGRATIONS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'migrations');
 
@@ -134,6 +135,13 @@ export function createEnv({ signupMode = 'open', ...overrides } = {}) {
 }
 
 export const ORIGIN = 'https://watchlog.example.workers.dev';
+
+// Every account needs a verified email: this stands in for the code arriving in the inbox
+// (POST /v1/email-codes), returning the { email, emailCode } a sign-up sends.
+let emailCount = 0;
+export async function signupEmail(env, email = `person${++emailCount}@example.com`) {
+  return { email, emailCode: await issueEmailCode(env, 'signup', email) };
+}
 
 export function request(pathname, { method = 'GET', origin, headers = {}, body } = {}) {
   const allHeaders = { ...headers };

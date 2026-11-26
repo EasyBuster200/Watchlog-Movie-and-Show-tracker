@@ -5,7 +5,11 @@
 // Who may create an account depends on the admin page's sign-up mode (settings.js). In
 // 'approval' mode an account without an invite code starts 'pending': it gets its key and a
 // session like any account, but can only check on itself until the owner approves it, and the
-// owner's devices get a push notification (push.js).
+// owner's devices get a push notification (push.js) and an email (email.js).
+//
+// Every account has a verified email (roadmap Phase 3c): sign-up first asks for a code sent to
+// it (POST /email-codes), and POST /accounts needs that code. The address can be changed later
+// (POST /account/email-code, then PUT /account/email). Recovery with it is in recovery.js.
 
 import { route, json, noContent, readJson, ApiError } from '../router.js';
 import {
@@ -14,8 +18,12 @@ import {
   createSession, requireAuth, rateLimit, clientKey, cleanName, nowIso,
 } from '../auth.js';
 import { getSettings } from '../settings.js';
-import { isAdmin } from '../admin.js';
+import { isAdmin, adminIds } from '../admin.js';
 import { notifyAdmins } from '../push.js';
+import {
+  normalizeEmail, hashEmail, sendEmail, sendNotice, issueEmailCode, useEmailCode,
+  codeEmail, alreadyHaveAccountEmail, emailChangedEmail, joinRequestEmail,
+} from '../email.js';
 
 const NAME_MAX = 40;
 const DEVICE_MAX = 60;
@@ -30,12 +38,34 @@ export const LIMITS = {
   pairPerClient: [10, 15 * 60],
   pairingCodesPerAccount: [10, HOUR],
   newKeyPerAccount: [5, HOUR],
+  emailCodesPerClient: [10, HOUR],
+  emailCodesPerAddress: [5, HOUR],
+  emailChangesPerAccount: [5, HOUR],
 };
 
 const limited = (env, key, [limit, seconds]) => rateLimit(env, key, limit, seconds);
 
-function accountJson(row) {
-  return { id: row.id, displayName: row.displayName, createdAt: row.createdAt, keyChangedAt: row.keyChangedAt, status: row.status || 'active' };
+export function accountJson(row) {
+  return { id: row.id, displayName: row.displayName, email: row.email || null, createdAt: row.createdAt, keyChangedAt: row.keyChangedAt, status: row.status || 'active' };
+}
+
+export const ACCOUNT_COLUMNS = 'id, display_name AS displayName, email, created_at AS createdAt, key_changed_at AS keyChangedAt, status';
+
+const INVALID_EMAIL = () => new ApiError(400, 'invalid_email', "That doesn't look like an email address.");
+const EMAIL_TAKEN = () => new ApiError(409, 'email_taken', 'Another account already uses that email. If it is yours, choose "Lost your key?" to get back in.');
+
+async function accountIdByEmail(env, email) {
+  const row = await env.DB.prepare('SELECT id FROM accounts WHERE email_hash = ?').bind(await hashEmail(email)).first();
+  return row ? row.id : null;
+}
+
+// The owner's email alert about a request to join (on top of the push notification).
+async function emailAdminsAboutRequest(env, request, { displayName, note, email }) {
+  const ids = adminIds(env);
+  if (!ids.length) return;
+  const { results } = await env.DB.prepare(`SELECT email FROM accounts WHERE email IS NOT NULL AND id IN (${ids.map(() => '?').join(', ')})`).bind(...ids).all();
+  const adminUrl = `${new URL(request.url).origin}/admin.html#requests`;
+  for (const row of results) await sendNotice(env, { to: row.email, ...joinRequestEmail({ displayName, note, email, adminUrl }) });
 }
 
 function sessionJson(session, currentId) {
@@ -58,9 +88,7 @@ async function signedInResponse(env, account, deviceName, extra = {}) {
 }
 
 async function accountByKey(env, data) {
-  const row = await env.DB.prepare(
-    'SELECT id, display_name AS displayName, created_at AS createdAt, key_changed_at AS keyChangedAt, status FROM accounts WHERE key_hash = ?'
-  ).bind(await hashAccountKey(data)).first();
+  const row = await env.DB.prepare(`SELECT ${ACCOUNT_COLUMNS} FROM accounts WHERE key_hash = ?`).bind(await hashAccountKey(data)).first();
   return row || null;
 }
 
@@ -90,6 +118,24 @@ route('GET', '/signup', async ({ env }) => {
   return json(await signupMode(env));
 });
 
+// Sign-up step 1: a code to the address. If it already belongs to an account, that address gets
+// a note saying so instead, and the answer is the same (so nobody learns who has an account).
+route('POST', '/email-codes', async ({ request, env }) => {
+  const body = await readJson(request);
+  const email = normalizeEmail(body.email);
+  if (!email) throw INVALID_EMAIL();
+  if (body.purpose !== undefined && body.purpose !== 'signup') throw new ApiError(400, 'invalid_purpose', 'Unknown code purpose.');
+  await limited(env, `email-code:client:${await clientKey(request)}`, LIMITS.emailCodesPerClient);
+  await limited(env, `email-code:address:${await hashEmail(email)}`, LIMITS.emailCodesPerAddress);
+  if (await accountIdByEmail(env, email)) {
+    await sendEmail(env, { to: email, ...alreadyHaveAccountEmail() });
+  } else {
+    const code = await issueEmailCode(env, 'signup', email);
+    await sendEmail(env, { to: email, ...codeEmail('signup', code) });
+  }
+  return json({ sent: true });
+});
+
 // Create an account (or, in 'approval' mode without an invite, ask to join). Returns its account
 // key, the only time the server ever sends it.
 route('POST', '/accounts', async ({ request, env, ctx }) => {
@@ -113,10 +159,22 @@ route('POST', '/accounts', async ({ request, env, ctx }) => {
   const status = mode === 'approval' && !invite ? 'pending' : 'active';
   const requestNote = status === 'pending' ? cleanName(body.note, { max: NOTE_MAX }) : null;
 
+  // The email, proven by the code sent to it (POST /email-codes).
+  const email = normalizeEmail(body.email);
+  if (!email) throw INVALID_EMAIL();
+  const { emailHash } = await useEmailCode(env, 'signup', email, body.emailCode);
+  if (await accountIdByEmail(env, email)) throw EMAIL_TAKEN();
+
   const accountKey = generateAccountKey();
-  const account = { id: crypto.randomUUID(), displayName, createdAt: now, keyChangedAt: now, status };
-  await env.DB.prepare('INSERT INTO accounts (id, key_hash, display_name, status, request_note, created_at, key_changed_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .bind(account.id, await hashAccountKey(accountKeyData(accountKey)), displayName, status, requestNote, now, now).run();
+  const account = { id: crypto.randomUUID(), displayName, email, createdAt: now, keyChangedAt: now, status };
+  try {
+    await env.DB.prepare(`INSERT INTO accounts (id, key_hash, display_name, status, request_note, created_at, key_changed_at, email, email_hash, email_verified_at)
+                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(account.id, await hashAccountKey(accountKeyData(accountKey)), displayName, status, requestNote, now, now, email, emailHash, now).run();
+  } catch (error) {
+    if (/UNIQUE/i.test(String(error && error.message))) throw EMAIL_TAKEN();
+    throw error;
+  }
 
   if (invite) {
     // Claim the invite only if it's still unused: two sign-ups racing for one code can't both win.
@@ -134,7 +192,9 @@ route('POST', '/accounts', async ({ request, env, ctx }) => {
       url: '/admin.html#requests',
       tag: 'signup-requests',
     }).catch(error => console.error('Push to the owner failed', error && error.stack ? error.stack : error));
-    if (ctx && ctx.waitUntil) ctx.waitUntil(notify); else await notify;
+    const mail = emailAdminsAboutRequest(env, request, { displayName, note: requestNote, email })
+      .catch(error => console.error('Email to the owner failed', error && error.stack ? error.stack : error));
+    if (ctx && ctx.waitUntil) { ctx.waitUntil(notify); ctx.waitUntil(mail); } else await Promise.all([notify, mail]);
   }
   return signedInResponse(env, account, deviceNameFrom(body), { accountKey });
 });
@@ -163,9 +223,7 @@ route('POST', '/sessions/pair', async ({ request, env }) => {
   if (!claimed || Date.parse(claimed.expires_at) <= Date.now()) {
     throw new ApiError(401, 'wrong_code', 'That code is wrong or has expired. Make a new one on your other device.');
   }
-  const account = await env.DB.prepare(
-    "SELECT id, display_name AS displayName, created_at AS createdAt, key_changed_at AS keyChangedAt, status FROM accounts WHERE id = ? AND status = 'active'"
-  ).bind(claimed.account_id).first();
+  const account = await env.DB.prepare(`SELECT ${ACCOUNT_COLUMNS} FROM accounts WHERE id = ? AND status = 'active'`).bind(claimed.account_id).first();
   if (!account) throw new ApiError(401, 'wrong_code', 'That code is wrong or has expired. Make a new one on your other device.');
   return signedInResponse(env, account, deviceNameFrom(body));
 });
@@ -173,7 +231,44 @@ route('POST', '/sessions/pair', async ({ request, env }) => {
 // Also how a device waiting for approval checks on itself (account.status).
 route('GET', '/account', async ({ request, env }) => {
   const { account, session } = await requireAuth(request, env, { allowPending: true });
-  return json({ account: accountJson(account), session: sessionJson(session, session.id), isAdmin: isAdmin(env, account.id) });
+  const recovery = await env.DB.prepare('SELECT completes_at AS completesAt FROM recoveries WHERE account_id = ?').bind(account.id).first();
+  return json({
+    account: accountJson(account), session: sessionJson(session, session.id), isAdmin: isAdmin(env, account.id),
+    recovery: recovery ? { completesAt: recovery.completesAt } : null,
+  });
+});
+
+// Changing the email, step 1: a code to the new address.
+route('POST', '/account/email-code', async ({ request, env }) => {
+  const { account } = await requireAuth(request, env, { allowPending: true });
+  const email = normalizeEmail((await readJson(request)).email);
+  if (!email) throw INVALID_EMAIL();
+  await limited(env, `email-change:account:${account.id}`, LIMITS.emailChangesPerAccount);
+  const owner = await accountIdByEmail(env, email);
+  if (owner === account.id) throw new ApiError(400, 'same_email', 'That is already your email.');
+  if (owner) throw EMAIL_TAKEN();
+  const code = await issueEmailCode(env, 'change', email, account.id);
+  await sendEmail(env, { to: email, ...codeEmail('change', code) });
+  return json({ sent: true });
+});
+
+// Changing the email, step 2: the code proves the new address. The old one is told.
+route('PUT', '/account/email', async ({ request, env }) => {
+  const { account } = await requireAuth(request, env, { allowPending: true });
+  const body = await readJson(request);
+  const email = normalizeEmail(body.email);
+  if (!email) throw INVALID_EMAIL();
+  const { accountId, emailHash } = await useEmailCode(env, 'change', email, body.code);
+  if (accountId !== account.id) throw new ApiError(400, 'wrong_email_code', 'That code is wrong or has expired. Ask for a new one.');
+  const now = nowIso();
+  try {
+    await env.DB.prepare('UPDATE accounts SET email = ?, email_hash = ?, email_verified_at = ? WHERE id = ?').bind(email, emailHash, now, account.id).run();
+  } catch (error) {
+    if (/UNIQUE/i.test(String(error && error.message))) throw EMAIL_TAKEN();
+    throw error;
+  }
+  if (account.email && account.email !== email) await sendNotice(env, { to: account.email, ...emailChangedEmail(email) });
+  return json({ account: accountJson({ ...account, email }) });
 });
 
 route('PATCH', '/account', async ({ request, env }) => {

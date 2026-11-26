@@ -193,6 +193,15 @@ function renderHome() {
     authEl.appendChild(list);
   }
 
+  pendingRecoveries().forEach(entry => {
+    const row = el('button', 'auth-recovery');
+    row.type = 'button';
+    row.appendChild(el('span', 'auth-recovery__title', `Recovering ${entry.displayName}`));
+    row.appendChild(el('span', 'auth-recovery__sub', `New key ready ${readyTime(entry.completesAt)}`));
+    row.addEventListener('click', () => show('recovering', { token: entry.token }));
+    authEl.appendChild(row);
+  });
+
   const actions = el('div', 'auth__actions');
   actions.appendChild(button('Sign in', 'primary', () => show('signin')));
   actions.appendChild(secondaryPair());
@@ -507,7 +516,7 @@ function renderPair({ restore = null } = {}) {
 //                         the wait)
 //   closed                nothing: it says so
 // `upgrade` is an offline profile (from Settings) that becomes this account, keeping its library.
-async function renderCreate({ upgrade = null } = {}) {
+async function renderCreate({ upgrade = null, values = null } = {}) {
   const upgrading = upgrade ? getProfiles().find(p => p.id === upgrade && !p.account) : null;
   authEl.appendChild(backButton(() => (upgrading ? openProfile(upgrading.id, 'settings.html') : show('home'))));
   const head = authHead({
@@ -538,7 +547,14 @@ async function renderCreate({ upgrade = null } = {}) {
   form.noValidate = true;
   const nameField = buildTextField({ label: 'Name', icon: 'user', placeholder: 'Your name', autocomplete: 'nickname', maxLength: 40 });
   if (upgrading) nameField.input.value = upgrading.displayName;
+  if (values) nameField.input.value = values.displayName;
   form.appendChild(nameField);
+  const emailField = buildTextField({
+    label: 'Email', type: 'email', icon: 'mail', placeholder: 'you@example.com', autocomplete: 'email', inputMode: 'email',
+    helper: "To get back in if you lose your key. We'll send a code to check it.",
+  });
+  if (values) emailField.input.value = values.email;
+  form.appendChild(emailField);
   let noteField = null;
   if (mode === 'approval') {
     noteField = buildTextField({ label: 'A note for the owner', icon: 'mail', placeholder: "e.g. Ana's brother", maxLength: 200, helper: 'So they know who you are.' });
@@ -557,26 +573,31 @@ async function renderCreate({ upgrade = null } = {}) {
   }
   const error = errorLine();
   form.appendChild(error);
-  const submit = button(mode === 'approval' ? 'Ask to join' : 'Create account', 'primary', null, { type: 'submit' });
+  if (values && noteField) noteField.input.value = values.note || '';
+  if (values && inviteField) inviteField.input.value = values.inviteCode || '';
+  const submit = button('Continue', 'primary', null, { type: 'submit' });
   form.appendChild(submit);
-  form.appendChild(el('p', 'auth__fine', "Next, you'll get an account key: a long code that signs you in on any device. Keep it somewhere safe. A recovery email is coming in an update."));
+  form.appendChild(el('p', 'auth__fine', "After the code, you'll get an account key: a long code that signs you in on any device. Keep it somewhere safe."));
   form.addEventListener('submit', async event => {
     event.preventDefault();
     const displayName = nameField.input.value.trim();
+    const email = emailField.input.value.trim();
     const inviteCode = inviteField ? inviteField.input.value.trim() : '';
     nameField.setError(displayName ? null : 'Enter a name.');
+    emailField.setError(emailLooksValid(email) ? null : 'Enter your email address.');
     if (inviteField) inviteField.setError(mode === 'invite' && !inviteCode ? 'Enter your invite code.' : null);
-    if (!displayName || (mode === 'invite' && !inviteCode)) return;
+    if (!displayName || !emailLooksValid(email) || (mode === 'invite' && !inviteCode)) return;
     error.show('');
     submit.disabled = true;
     try {
-      const created = await createOnlineAccount(displayName, { inviteCode, note: noteField ? noteField.input.value.trim() : null });
-      const profile = upgrading || createProfile({ displayName: created.account.displayName, tmdbApiKey: null });
-      linkProfileToAccount(profile.id, created, { accountKey: created.accountKey });
-      show('save-key', { profileId: profile.id, next: upgrading ? 'settings.html' : 'main.html' });
+      await requestSignupCode(email);
+      show('create-code', {
+        upgrade: upgrading ? upgrading.id : null,
+        form: { mode, displayName, email, inviteCode: inviteCode || null, note: noteField ? noteField.input.value.trim() : null },
+      });
     } catch (err) {
-      console.error('Creating an account failed:', err);
-      if (inviteField && ['wrong_invite', 'invite_required'].includes(err.code)) inviteField.setError(err.message);
+      console.error('Sending the sign-up code failed:', err);
+      if (err.code === 'invalid_email') emailField.setError(err.message);
       else error.show(err.message || 'Something went wrong. Try again.');
     } finally {
       submit.disabled = false;
@@ -717,45 +738,186 @@ function renderSaveKey({ profileId, next = 'main.html' }) {
   authEl.appendChild(promptLine('Not now?', 'Remind me later in Settings', () => openProfile(profileId, next)));
 }
 
-// The recovery email is roadmap Phase 3c (it needs a domain to send from).
-const RECOVERY_NOT_READY = "Recovery emails aren't available yet. If you're signed in on another device, use Settings → Add a device there.";
+// ---------- Lost your key? (roadmap Phase 3c) ----------
+// The email on the account gets a code; entering it starts a 24-hour hold, during which the
+// account's signed-in devices can cancel it; after it, this device gets a new key and every
+// other device is signed out. Waiting recoveries are kept on this device (serverApi.js's
+// pendingRecoveries), so the app can be closed meanwhile.
 
-function renderRecover() {
+function emailLooksValid(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+}
+
+function codeField(label) {
+  const field = buildTextField({ label, icon: 'lock', placeholder: '123456', autocomplete: 'one-time-code', maxLength: 6, inputMode: 'numeric' });
+  field.input.spellcheck = false;
+  return field;
+}
+
+function readyTime(iso) {
+  return new Date(iso).toLocaleString(undefined, { weekday: 'long', hour: '2-digit', minute: '2-digit' });
+}
+
+function renderRecover({ email = '' } = {}) {
   authEl.appendChild(backButton(() => show('signin')));
-  authEl.appendChild(authHead({ title: 'Lost your key?', text: "Enter the recovery email on your account and we'll send you a code to set up a new key." }));
+  authEl.appendChild(authHead({ title: 'Lost your key?', text: "Enter your account's email and we'll send you a code to set up a new key." }));
   const form = el('form', 'auth__form');
   form.noValidate = true;
-  const emailField = buildTextField({ label: 'Recovery email', type: 'email', icon: 'mail', placeholder: 'you@example.com', autocomplete: 'email', inputMode: 'email' });
+  const emailField = buildTextField({ label: 'Email', type: 'email', icon: 'mail', placeholder: 'you@example.com', autocomplete: 'email', inputMode: 'email', value: email });
   form.appendChild(emailField);
   const error = errorLine();
   form.appendChild(error);
-  form.appendChild(button('Send code', 'primary', null, { type: 'submit' }));
-  form.addEventListener('submit', event => {
+  const submit = button('Send code', 'primary', null, { type: 'submit' });
+  form.appendChild(submit);
+  form.addEventListener('submit', async event => {
     event.preventDefault();
-    const email = emailField.input.value.trim();
-    if (!/^\S+@\S+\.\S+$/.test(email)) { emailField.setError('Enter the email address on your account.'); return; }
+    const value = emailField.input.value.trim();
+    if (!emailLooksValid(value)) { emailField.setError('Enter the email address on your account.'); return; }
     emailField.setError(null);
-    error.show(RECOVERY_NOT_READY);
+    error.show('');
+    submit.disabled = true;
+    try {
+      await requestRecoveryCode(value);
+      show('inbox', { email: value });
+    } catch (err) {
+      error.show(err.message || 'Something went wrong. Try again.');
+    } finally {
+      submit.disabled = false;
+    }
   });
   authEl.appendChild(form);
   authEl.appendChild(promptLine('Signed in on another device?', 'Use a code from it', () => show('pair')));
 }
 
-// Shown once the server has sent a recovery code (not reachable until Phase 3c).
+// The recovery code from the email.
 function renderInbox({ email = '' } = {}) {
-  authEl.appendChild(backButton(() => show('recover')));
+  authEl.appendChild(backButton(() => show('recover', { email })));
+  const head = el('div', 'auth__head auth__head--centred');
+  const icon = el('div', 'auth__badge');
+  icon.innerHTML = ttIcon('mail', { size: 24 });
+  head.appendChild(icon);
+  head.appendChild(el('h1', 'auth__title', 'Check your inbox'));
+  const text = el('p', 'auth__text', 'If an account uses ');
+  text.appendChild(el('strong', null, email));
+  text.appendChild(document.createTextNode(", we sent it a code. It works for 15 minutes."));
+  head.appendChild(text);
+  authEl.appendChild(head);
+  const form = el('form', 'auth__form');
+  form.noValidate = true;
+  const field = codeField('Code from the email');
+  form.appendChild(field);
+  const error = errorLine();
+  form.appendChild(error);
+  const submit = button('Continue', 'primary', null, { type: 'submit' });
+  form.appendChild(submit);
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const code = field.input.value.trim();
+    if (!code) { field.setError('Enter the code from the email.'); return; }
+    field.setError(null);
+    error.show('');
+    submit.disabled = true;
+    try {
+      const entry = await startRecovery(email, code);
+      show('recovering', { token: entry.token });
+    } catch (err) {
+      if (err.code === 'wrong_email_code') field.setError(err.message);
+      else error.show(err.message || 'Something went wrong. Try again.');
+    } finally {
+      submit.disabled = false;
+    }
+  });
+  authEl.appendChild(form);
+  authEl.appendChild(promptLine("Didn't get it? Check spam, or", 'send it again', () => show('recover', { email })));
+}
+
+// Waiting out the hold. "Check now" finishes it once the time has come.
+function renderRecovering({ token }) {
+  const entry = pendingRecoveries().find(r => r.token === token);
+  if (!entry) { show('home'); return; }
+  authEl.appendChild(backButton(() => show('home')));
+  const head = el('div', 'auth__head auth__head--centred');
+  const badge = el('div', 'auth__badge');
+  badge.innerHTML = ttIcon('clock', { size: 24 });
+  head.appendChild(badge);
+  head.appendChild(el('h1', 'auth__title', 'Almost there'));
+  head.appendChild(el('p', 'auth__text', `To keep "${entry.displayName}" safe, a new key is ready ${readyTime(entry.completesAt)}. Until then, any device still signed in can cancel this, in case it wasn't you. You can close the app and come back.`));
+  authEl.appendChild(head);
+  const status = el('p', 'auth__fine');
+  status.setAttribute('role', 'status');
+  const check = button('Check now', 'primary', async () => {
+    check.disabled = true;
+    status.textContent = 'Checking…';
+    try {
+      const signIn = await completeRecovery(entry);
+      const existing = profileForAccount(signIn.account.id);
+      const profile = existing || createProfile({ displayName: signIn.account.displayName, tmdbApiKey: null });
+      linkProfileToAccount(profile.id, signIn, { accountKey: signIn.accountKey });
+      show('save-key', { profileId: profile.id });
+    } catch (err) {
+      if (err.code === 'recovery_waiting') status.textContent = `Not yet: it's ready ${readyTime(entry.completesAt)}.`;
+      else if (err.code === 'recovery_cancelled') status.textContent = 'This recovery was cancelled from a signed-in device, or replaced by a newer one.';
+      else status.textContent = err.message || 'Something went wrong. Try again.';
+    } finally {
+      check.disabled = false;
+    }
+  });
+  authEl.appendChild(check);
+  authEl.appendChild(status);
+  authEl.appendChild(promptLine('Changed your mind?', 'Stop waiting on this device', () => { forgetRecovery(entry.token); show('home'); }));
+}
+
+// Sign-up's second step: the code sent to the email. Creating the account needs it.
+function renderCreateCode({ form: fields, upgrade = null }) {
+  authEl.appendChild(backButton(() => show('create', { upgrade, values: fields })));
   const head = el('div', 'auth__head auth__head--centred');
   const icon = el('div', 'auth__badge');
   icon.innerHTML = ttIcon('mail', { size: 24 });
   head.appendChild(icon);
   head.appendChild(el('h1', 'auth__title', 'Check your inbox'));
   const text = el('p', 'auth__text', 'We sent a code to ');
-  text.appendChild(el('strong', null, email || 'your recovery email'));
-  text.appendChild(document.createTextNode('. It expires in 30 minutes.'));
+  text.appendChild(el('strong', null, fields.email));
+  text.appendChild(document.createTextNode('. It works for 15 minutes.'));
   head.appendChild(text);
   authEl.appendChild(head);
-  authEl.appendChild(button('Back to sign in', 'primary', () => show('signin')));
-  authEl.appendChild(promptLine("Didn't get it? Check spam, or", 'send it again', () => show('recover')));
+  const form = el('form', 'auth__form');
+  form.noValidate = true;
+  const field = codeField('Code from the email');
+  form.appendChild(field);
+  const error = errorLine();
+  form.appendChild(error);
+  const submit = button(fields.mode === 'approval' && !fields.inviteCode ? 'Ask to join' : 'Create account', 'primary', null, { type: 'submit' });
+  form.appendChild(submit);
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const emailCode = field.input.value.trim();
+    if (!emailCode) { field.setError('Enter the code from the email.'); return; }
+    field.setError(null);
+    error.show('');
+    submit.disabled = true;
+    try {
+      const created = await createOnlineAccount(fields.displayName, { email: fields.email, emailCode, inviteCode: fields.inviteCode, note: fields.note });
+      const upgrading = upgrade ? getProfiles().find(p => p.id === upgrade && !p.account) : null;
+      const profile = upgrading || createProfile({ displayName: created.account.displayName, tmdbApiKey: null });
+      linkProfileToAccount(profile.id, created, { accountKey: created.accountKey });
+      show('save-key', { profileId: profile.id, next: upgrading ? 'settings.html' : 'main.html' });
+    } catch (err) {
+      console.error('Creating an account failed:', err);
+      if (err.code === 'wrong_email_code') field.setError(err.message);
+      else error.show(err.message || 'Something went wrong. Try again.');
+    } finally {
+      submit.disabled = false;
+    }
+  });
+  authEl.appendChild(form);
+  authEl.appendChild(promptLine("Didn't get it? Check spam, or", 'send it again', async () => {
+    try {
+      await requestSignupCode(fields.email);
+      error.show('Sent again.');
+    } catch (err) {
+      error.show(err.message || "Couldn't send it. Try again.");
+    }
+  }));
 }
 
 const SCREENS = {
@@ -767,8 +929,10 @@ const SCREENS = {
   pair: renderPair,
   create: renderCreate,
   'save-key': renderSaveKey,
+  'create-code': renderCreateCode,
   recover: renderRecover,
   inbox: renderInbox,
+  recovering: renderRecovering,
   waiting: renderWaiting,
 };
 

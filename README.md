@@ -173,11 +173,20 @@ When it's done, Watchlog appears in your app list.
 Instead of an offline profile, you can have an **online account**: your library is kept the same on
 every device you sign in on (phone, tablet, laptop), and you **don't need a TMDB key**.
 
-- On **Who's watching?**, tap **Create an account**. Enter your name and a short note so the owner
-  knows who you are (for example "Ana's brother"), then **Ask to join**. If the owner gave you an
-  **invite code**, enter it too and you're in straight away.
+- On **Who's watching?**, tap **Create an account**. Enter your name, your **email**, and a short
+  note so the owner knows who you are (for example "Ana's brother"). If the owner gave you an
+  **invite code**, enter it too and you're in straight away. Watchlog emails you a 6-digit code:
+  type it in to finish.
 - You get an **account key**: a long code that signs you in on any device. **Save it** somewhere
-  safe (a password manager, your files, or on paper). It's the only way to sign in again.
+  safe (a password manager, your files, or on paper).
+- **Lost your key**, and no device still signed in? On the sign-in screen, tap **Lost your key?**,
+  enter your email and the code it gets. To keep your account safe from someone who got into your
+  email, the new key is ready **24 hours** later; meanwhile any device still signed in shows
+  "Someone is recovering your account" with a **Cancel** button, and you get an email about it.
+  When the time comes, open Watchlog and tap **Check now**: you get a new key, and every other
+  device is signed out.
+- Your email is only used for this and for notices about your account. Change it in
+  **Settings → Email**.
 - Without an invite, you see **Waiting for approval** until the owner lets you in. Tap **Check
   again** any time.
 - To add another device: on a signed-in one, go to **Settings → Add a device** and enter the code
@@ -371,9 +380,10 @@ version you have at the bottom of Settings.
 - **Offline profiles** have no account, and nothing they track leaves your phone. (The web app's
   address only delivers the app itself.)
 - **Online accounts** keep your library on the Watchlog server (on Cloudflare) so it can sync
-  between your devices. The server knows your account's name, the note you sent when asking to
-  join, and your signed-in devices; your account key is stored only as a scrambled fingerprint.
-  The owner's admin page shows names and counts, not what you watch. Deleting your account
+  between your devices. The server knows your account's name and email, the note you sent when
+  asking to join, and your signed-in devices; your account key is stored only as a scrambled
+  fingerprint. Emails (codes and account notices) are sent through Resend. The owner's admin page
+  shows names, emails and counts, not what you watch. Deleting your account
   (**Settings → Delete online account**) deletes it all from the server.
 - The only thing it connects to is **TMDB**, to get movie and show information and pictures,
   using your own token. Your watch history is never sent anywhere.

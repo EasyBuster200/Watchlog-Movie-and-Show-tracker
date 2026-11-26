@@ -467,6 +467,32 @@ async function newAccountKey({ confirmed = false } = {}) {
   if (await accountAction(() => makeNewAccountKey(user), "Couldn't make a new key")) window.location.href = saveKeyUrl();
 }
 
+// The account's email (recovery, and notices about the account): a code to the new address.
+async function changeEmail() {
+  const email = await promptDialog({ title: 'Change your email', label: 'New email', placeholder: 'you@example.com', confirmLabel: 'Send code', value: '' });
+  if (!email) return;
+  if (await accountAction(() => requestEmailChangeCode(user, email), "Couldn't send the code") === undefined) return;
+  const code = await promptDialog({ title: 'Check your inbox', label: `The 6-digit code sent to ${email}`, placeholder: '123456', confirmLabel: 'Change email' });
+  if (!code) return;
+  if (await accountAction(() => confirmEmailChange(user, email, code), "Couldn't change the email") === undefined) return;
+  user = getActiveProfile();
+  renderSections();
+}
+
+async function cancelRecoveryFromSettings() {
+  const ok = await confirmDialog({
+    title: 'Cancel the recovery?',
+    message: "A device asked to recover your account with a code sent to your email. If it wasn't you, cancel it and check that your email account is safe. Your account key stays the same.",
+    confirmLabel: 'Cancel the recovery',
+    cancelLabel: 'It was me',
+    danger: true,
+  });
+  if (!ok) return;
+  if (await accountAction(() => cancelAccountRecovery(user), "Couldn't cancel") === undefined) return;
+  user = getActiveProfile();
+  renderSections();
+}
+
 async function addDevice() {
   const pairing = await accountAction(() => createPairingCode(user), "Couldn't make a code");
   if (!pairing) return;
@@ -661,9 +687,18 @@ function onlineAccountSection() {
   const syncRow = settingsRow({ label: 'Sync', sub: 'Checking…', value: 'Sync now', onClick: () => syncFromSettings(syncRow) });
   currentSyncRow = syncRow;
   showSyncStatus(syncRow);
+  const recoveryRow = account.recovery ? settingsRow({
+    label: 'Someone is recovering this account',
+    sub: `It gets a new key on ${new Date(account.recovery.completesAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}. Not you?`,
+    value: 'Cancel',
+    danger: true,
+    onClick: cancelRecoveryFromSettings,
+  }) : null;
   return settingsSection('Online account', [
+    recoveryRow,
     adminRow,
     syncRow,
+    settingsRow({ label: 'Email', sub: account.email ? `${account.email} · for getting back in if you lose your key` : 'For getting back in if you lose your key', value: 'Change', onClick: changeEmail }),
     settingsRow({
       label: 'Account key',
       sub: account.keySavedAt ? 'Saved' : account.accountKey ? 'Not saved yet. Save it now.' : 'Not on this device',

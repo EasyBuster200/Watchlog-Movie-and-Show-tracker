@@ -14,13 +14,14 @@ export async function runCleanup(env, now = new Date()) {
   const iso = now.toISOString();
   const oldestWindow = Math.floor(now.getTime() / 1000) - RATE_LIMIT_KEEP_SECONDS;
   const ago = days => new Date(now.getTime() - days * DAY_MS).toISOString();
-  const [sessions, codes, limits, pushLog, titles] = await env.DB.batch([
+  const [sessions, codes, limits, pushLog, titles, emailCodes] = await env.DB.batch([
     env.DB.prepare('DELETE FROM sessions WHERE expires_at <= ?').bind(iso),
     env.DB.prepare('DELETE FROM pairing_codes WHERE expires_at <= ?').bind(iso),
     env.DB.prepare('DELETE FROM rate_limits WHERE window_start < ?').bind(oldestWindow),
     env.DB.prepare('DELETE FROM push_log WHERE sent_at < ?').bind(ago(PUSH_LOG_KEEP_DAYS)),
     env.DB.prepare('DELETE FROM tmdb_titles WHERE fetched_at < ?').bind(ago(TITLES_KEEP_DAYS)),
+    env.DB.prepare('DELETE FROM email_codes WHERE expires_at <= ?').bind(iso),
   ]);
   const changes = result => (result && result.meta && result.meta.changes) || 0;
-  return { sessions: changes(sessions), pairingCodes: changes(codes), rateLimits: changes(limits), pushLog: changes(pushLog), titles: changes(titles) };
+  return { sessions: changes(sessions), pairingCodes: changes(codes), rateLimits: changes(limits), pushLog: changes(pushLog), titles: changes(titles), emailCodes: changes(emailCodes) };
 }

@@ -4,7 +4,7 @@ import worker from '../src/index.js';
 import { accountKeyData, generateAccountKey, normalizeCode, ALPHABET } from '../src/auth.js';
 import { runCleanup } from '../src/cleanup.js';
 import { LIMITS } from '../src/routes/accounts.js';
-import { createEnv, createCtx, ORIGIN } from './helpers.js';
+import { createEnv, createCtx, ORIGIN, signupEmail } from './helpers.js';
 
 // One "device": an IP address and, once signed in, its session token.
 async function api(env, method, path, { body, token, ip = '203.0.113.1' } = {}) {
@@ -20,7 +20,7 @@ async function api(env, method, path, { body, token, ip = '203.0.113.1' } = {}) 
 }
 
 async function createAccount(env, opts = {}) {
-  const res = await api(env, 'POST', '/v1/accounts', { body: { displayName: 'Ana', deviceName: 'iPhone', ...opts.body }, ip: opts.ip });
+  const res = await api(env, 'POST', '/v1/accounts', { body: { displayName: 'Ana', deviceName: 'iPhone', ...(await signupEmail(env)), ...opts.body }, ip: opts.ip });
   assert.equal(res.status, 201, JSON.stringify(res.body));
   return res.body;
 }
@@ -262,7 +262,7 @@ test('the weekly cleanup removes expired sessions and codes and old rate-limit c
   assert.ok(counters > 0);
   const later = new Date(Date.now() + 200 * 24 * 3600 * 1000);
   const result = await runCleanup(env, later);
-  assert.deepEqual(result, { sessions: 1, pairingCodes: 1, rateLimits: counters, pushLog: 0, titles: 0 });
+  assert.deepEqual(result, { sessions: 1, pairingCodes: 1, rateLimits: counters, pushLog: 0, titles: 0, emailCodes: 0 });
   assert.equal(rows(env, 'SELECT * FROM rate_limits').length, 0);
   assert.equal(rows(env, 'SELECT * FROM accounts').length, 1, 'accounts are kept');
 });
