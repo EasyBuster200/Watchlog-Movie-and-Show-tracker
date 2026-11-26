@@ -1,6 +1,6 @@
 # Watchlog plan: web app, accounts, sync, friends, admin
 
-Status: **Phase 1 (web app) is done and live at https://watchlog.duartecruzcoelho.workers.dev. Phase 2 (server foundation) is built. Later phases not started.** This file collects what has been decided so far and the order to build it in. Update it as decisions change.
+Status: **Phase 1 (web app) is done and live at https://watchlogtracker.com. Phase 2 (server foundation) is built. Later phases not started.** This file collects what has been decided so far and the order to build it in. Update it as decisions change.
 
 ## Goals
 
@@ -59,7 +59,7 @@ Status: **Phase 1 (web app) is done and live at https://watchlog.duartecruzcoelh
 
 ## Phase 1: Watchlog as a web app (PWA)
 
-**Done, live at https://watchlog.duartecruzcoelho.workers.dev.** What was built and how is in `docs/DEVELOPMENT.md` ("The web app"). Hosted as a static-assets Cloudflare Worker (`wrangler.jsonc`) rather than Cloudflare Pages: Cloudflare now steers new projects to Workers, and the Phase 2 API joins the same Worker. Checked on the live site: every file is served, the service worker caches the whole app, and the `page.html` → `/page` redirect keeps the query string. Still to check on a real iPhone: status bar, safe areas, the share sheet. The backup reminder (7+ days since the last export) was brought forward from Phase 4, because the web app has no automatic backup.
+**Done, live at https://watchlogtracker.com** (first at a workers.dev address; `docs/DEVELOPMENT.md`, "The domain"). What was built and how is in `docs/DEVELOPMENT.md` ("The web app"). Hosted as a static-assets Cloudflare Worker (`wrangler.jsonc`) rather than Cloudflare Pages: Cloudflare now steers new projects to Workers, and the Phase 2 API joins the same Worker. Checked on the live site: every file is served, the service worker caches the whole app, and the `page.html` → `/page` redirect keeps the query string. Still to check on a real iPhone: status bar, safe areas, the share sheet. The backup reminder (7+ days since the last export) was brought forward from Phase 4, because the web app has no automatic backup.
 
 Do this first: it works with today's local profiles and needs no backend.
 

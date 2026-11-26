@@ -21,7 +21,7 @@
 //
 // Load after profiles.js.
 
-const PRODUCTION_SERVER_URL = 'https://watchlog.duartecruzcoelho.workers.dev';
+const PRODUCTION_SERVER_URL = 'https://watchlogtracker.com';
 // Points the app at another server (e.g. a pull request's preview) when set in localStorage.
 const SERVER_URL_OVERRIDE_KEY = 'watchlog_server_url';
 

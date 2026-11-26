@@ -30,7 +30,7 @@ ideas:
   <a href="https://github.com/EasyBuster200/Watchlog-Movie-and-Show-tracker/releases/latest/download/Watchlog.apk"><b>⬇ Download the latest Watchlog.apk</b></a>
   · <a href="https://github.com/EasyBuster200/Watchlog-Movie-and-Show-tracker/releases">All versions</a>
   <br>
-  <a href="https://watchlog.duartecruzcoelho.workers.dev"><b>📱 Open the web app (iPhone)</b></a>
+  <a href="https://watchlogtracker.com"><b>📱 Open the web app (iPhone)</b></a>
 </p>
 
 ---
@@ -145,7 +145,7 @@ When it's done, Watchlog appears in your app list.
 
 #### On iPhone
 
-1. Open **[watchlog.duartecruzcoelho.workers.dev](https://watchlog.duartecruzcoelho.workers.dev)** in **Safari**. (It has to be Safari: other
+1. Open **[watchlogtracker.com](https://watchlogtracker.com)** in **Safari**. (It has to be Safari: other
    browsers on iPhone can't add apps to the Home Screen properly.)
 2. Tap the **Share** button (the square with an arrow), scroll down and tap **Add to Home
    Screen**, then **Add**.
