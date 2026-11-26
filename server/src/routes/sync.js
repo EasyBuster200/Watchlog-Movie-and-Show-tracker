@@ -2,13 +2,14 @@
 // returns everything changed since this device last asked.
 //
 // Request:  { since: <cursor, 0 the first time>, changes: [{ kind, key, data, deleted, updatedAt }] }
-// Response: { cursor, changes: [{ kind, key, data, deleted, updatedAt }], more, accepted }
+// Response: { cursor, changes: [{ kind, key, data, deleted, updatedAt }], more, accepted, serverTime }
 //
 // - Every record is one row of sync_records (migration 0003). A deletion is kept as a tombstone
 //   (deleted: true, data: null), so devices that were offline still learn about it.
 // - Newest wins, per record: a change is stored only if its updatedAt is later than what's
 //   stored. updatedAt is the device's clock, capped at the server's clock (+ a little), so a
-//   device whose clock runs ahead can't win every argument.
+//   device whose clock runs ahead can't win every argument. The reply carries serverTime, so the
+//   app can stamp its changes with the server's clock instead of its own (public/scripts/sync.js).
 // - Order: each accepted change gets the next number (seq) in the account's sequence
 //   (accounts.sync_seq, bumped atomically). A device remembers the highest seq it has seen (the
 //   cursor) and asks for everything after it. Its own changes come back too; applying them again
@@ -94,5 +95,5 @@ route('POST', '/sync', async ({ request, env }) => {
   const more = results.length > MAX_CHANGES_OUT;
   const page = more ? results.slice(0, MAX_CHANGES_OUT) : results;
   const cursor = page.length ? page[page.length - 1].seq : since;
-  return json({ cursor, changes: page.map(changeJson), more, accepted: changes.length });
+  return json({ cursor, changes: page.map(changeJson), more, accepted: changes.length, serverTime: new Date().toISOString() });
 });

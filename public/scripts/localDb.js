@@ -7,7 +7,21 @@
 // database *is* one profile's data), with JS-camelCase field names matching the rest of the app's
 // existing "standard item shape" conventions.
 
-const DB_VERSION = 4;
+const DB_VERSION = 5;
+
+// Sync (sync.js) knows lists by a sync id shared by every device, not by their local numbers.
+// The Watchlist has the same fixed one everywhere, so every device's Watchlist is the same list.
+const WATCHLIST_SYNC_ID = 'watchlist';
+
+function newSyncId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// The Watchlist row a new or reset database starts with.
+function newWatchlistRow() {
+  return { name: 'Bookmarks', isDefault: true, syncId: WATCHLIST_SYNC_ID, createdAt: new Date(0).toISOString() };
+}
 
 function promisifyRequest(request) {
   return new Promise((resolve, reject) => {
@@ -27,7 +41,7 @@ function openProfileDb(profileId) {
         const lists = db.createObjectStore('lists', { keyPath: 'id', autoIncrement: true });
         lists.createIndex('name', 'name', { unique: true });
         // Every profile gets a default "Bookmarks" list, mirroring the old signup-time behavior.
-        lists.add({ name: 'Bookmarks', isDefault: true, createdAt: new Date(0).toISOString() });
+        lists.add(newWatchlistRow());
 
         const listItems = db.createObjectStore('list_items', { keyPath: 'id', autoIncrement: true });
         listItems.createIndex('listId', 'listId');
@@ -60,6 +74,23 @@ function openProfileDb(profileId) {
       // v4: watched titles leave the Watchlist (see pruneWatchedFromWatchlist). Titles watched
       // before this version are cleared out once the database is open.
       if (event.oldVersion >= 1 && event.oldVersion < 4) pruneAfterOpen = true;
+
+      // v5: sync (sync.js). Lists get a sync id (the Watchlist the fixed WATCHLIST_SYNC_ID);
+      // sync_outbox holds this device's changes until the server has them (one row per record,
+      // id `<kind>|<key>`, so changing a record twice sends it once); sync_state holds the
+      // cursor and the last sync's result.
+      if (event.oldVersion < 5 && db.objectStoreNames.contains('lists')) {
+        const lists = request.transaction.objectStore('lists');
+        lists.createIndex('syncId', 'syncId', { unique: true });
+        lists.openCursor().onsuccess = e => {
+          const cursor = e.target.result;
+          if (!cursor) return;
+          if (!cursor.value.syncId) cursor.update({ ...cursor.value, syncId: cursor.value.isDefault ? WATCHLIST_SYNC_ID : newSyncId() });
+          cursor.continue();
+        };
+      }
+      if (!db.objectStoreNames.contains('sync_outbox')) db.createObjectStore('sync_outbox', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('sync_state')) db.createObjectStore('sync_state', { keyPath: 'key' });
     };
 
     let pruneAfterOpen = false;
@@ -112,6 +143,13 @@ function dbDelete(db, storeName, key) {
 // Nothing you've watched stays on the Watchlist (decided with the user): a movie once it's
 // marked watched, a show once any episode is. localApi.js removes each title as it's marked;
 // this sweeps the whole Watchlist, for databases from before that rule and restored backups.
+// Lists restored from a backup made before sync ids existed get one.
+async function ensureListSyncIds(db) {
+  for (const list of await dbGetAll(db, 'lists')) {
+    if (!list.syncId) await dbPut(db, 'lists', { ...list, syncId: list.isDefault ? WATCHLIST_SYNC_ID : newSyncId() });
+  }
+}
+
 async function pruneWatchedFromWatchlist(db) {
   if (!db.objectStoreNames.contains('list_items')) return;
   const [lists, items, movies, episodes] = await Promise.all([

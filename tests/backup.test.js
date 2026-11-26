@@ -220,6 +220,15 @@ test('every profile on the device gets its own weekly file; "Back Up Now" forces
 
 // --- TMDB key validation ----------------------------------------------------------------------
 
+test('online profiles get no auto-backup, not even "Back up now": the account has their library', async () => {
+  const app = createApp({ native: true });
+  const id = app.run('getActiveProfileId()');
+  app.run(`linkProfileToAccount('${id}', { account: { id: 'acc-1', displayName: 'Ana' }, session: { id: 's-1' }, token: 't' })`);
+  assert.deepEqual(await app.call('runAutoBackups'), []);
+  assert.deepEqual(await app.call('runAutoBackups', { force: true, profileIds: [id] }), []);
+  assert.deepEqual(app.filesystem.documents(), []);
+});
+
 test('validateTmdbApiKey accepts a working token', async () => {
   const app = createApp({
     withProfile: false,

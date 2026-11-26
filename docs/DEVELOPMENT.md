@@ -256,7 +256,7 @@ everything changed since that device last asked:
 
 ```
 request:  { since: <cursor, 0 the first time>, changes: [{ kind, key, data, deleted, updatedAt }] }
-response: { cursor, changes: [...same shape...], more, accepted }
+response: { cursor, changes: [...same shape...], more, accepted, serverTime }
 ```
 
 - Every record of every account is one row of `sync_records` (migration `0003_sync.sql`), keyed by
@@ -305,19 +305,61 @@ owner's token. Offline profiles still call TMDB directly with their own token.
 `public/scripts/serverApi.js` makes the app's requests to the API above, and the profile picker
 and Settings use it: create an account, save the key, sign in with the key or a code from another
 device, add a device, see and sign out devices, sign out, delete the account. An online profile
-is an ordinary profile with an `account` on it; its library stays on the device until syncing
-exists (roadmap Phase 4). Online profiles get movie and show information through the TMDB proxy
+is an ordinary profile with an `account` on it; its library is in its own IndexedDB like any profile's,
+and `sync.js` keeps it the same on every signed-in device (below). Online profiles get movie and show information through the TMDB proxy
 above, so creating an account, or signing in on a new device, asks for no token. Signing out (or
 deleting the account) asks whether to keep a copy on the device, which then needs its own TMDB
-token to work offline, or remove it; a kept copy remembers its account, so signing in again
-reattaches it with its library.
+token to work offline, or remove it. A kept copy is a separate offline profile from then on:
+signing in again makes a new profile that starts from what's on the account, and nothing done in
+the copy reaches it.
 
-**It's all hidden** until then. To try it, open the browser console on the app (a pull request's
+**It's all hidden** until sign-up is invite-only (decided with the user). To try it, open the browser console on the app (a pull request's
 preview, so the preview database is used) and run
 `localStorage.setItem('watchlog_preview_online_accounts', '1')`, then reload. The web app calls the
 server on its own address; the Android app calls production; setting
 `localStorage.watchlog_server_url` points either at another server (it must allow the page's
 origin, see CORS above).
+
+#### Sync in the app
+
+`public/scripts/sync.js` (loaded after `serverApi.js` on every page with `localApi.js`) uses the
+Sync API above. Only profiles with an account sync; offline profiles record nothing.
+
+- **Recording:** every `localApi.js` route that writes calls `recordSyncChanges(db, records)`,
+  which puts the change in the profile's `sync_outbox` store (database v5), one row per record
+  (`<kind>|<key>`), so a record changed twice is sent once. Settings records the synced
+  preferences (theme, accent, region, language) with `recordPrefsChange`.
+- **Lists** have a `syncId` (v5 gives existing lists one; the Watchlist is `watchlist` on every
+  device). Pages keep using the local list numbers; list items travel as
+  `<list sync id>:<movie|tv>:<id>`.
+- **Syncing** (`syncNow`): sends up to 200 waiting changes (and at most 100 KB), applies what
+  comes back, removes what was sent from the outbox, and repeats until both sides are through.
+  An incoming change is skipped when this device has a newer one waiting (newest wins, as on the
+  server). The cursor, the last sync time and the last error are in the `sync_state` store.
+- **First sync** of a profile on an account (after "Make this an online account", or signing in
+  on a new device, where the library starts empty): the whole library is queued, each record with
+  its own time (when it was watched, added, favourited), so newer changes on the account still win.
+  Preferences go with the oldest possible time, so an account that has some keeps them.
+- **Clock:** changes are stamped with the server's time, not the device's. Each reply carries
+  `serverTime`, and the device keeps the difference from its own clock (`sync_state`), so a phone
+  whose clock is behind still has its latest change win.
+- **Same-named lists** from two devices: the newer one (by `createdAt`, then sync id) is renamed
+  "Name (2)" and the rename synced, so every device ends up with the same names.
+- **Reset all data** on an online profile records a deletion for every record; Settings syncs
+  before (to know everything the account has) and after.
+- **When:** shortly after each page load (skipped if a sync finished in the last 10 seconds and
+  nothing is waiting), 2 seconds after a change, when the connection comes back, when the app
+  comes back to the screen, and Settings' "Sync now" (the Sync row shows the status). One sync at
+  a time per page, and per profile across tabs (`navigator.locks`). When changes arrive after the
+  page was drawn, the page reloads itself if the person hasn't touched it yet (at most once every
+  15 seconds); otherwise a notice offers to refresh, so nothing moves under their finger.
+- **Backups:** online profiles don't auto-back up on Android any more; the account has their
+  library. Offline profiles keep the weekly file. Export data works for both.
+
+To try two devices in one browser: two profiles signed in to the same account are two devices,
+each with its own database. `npx wrangler d1 migrations apply DB --local` and the
+`watchlog-worker` launch configuration (`wrangler dev --local`) run the whole thing on this
+machine, with a local database (TMDB requests fail there: no token).
 
 #### Server database
 
@@ -365,8 +407,9 @@ loads the app's real data-layer scripts into a sandbox that stands in for one pa
 IndexedDB (`fake-indexeddb`), `localStorage`, a fake TMDB server, and fakes of the Capacitor
 plugins. The tests then call the same `/api/...` routes the pages use. They cover watch
 tracking, show statuses, the schedule, stats, recommendations, caching and retries, backups and
-auto-backups, notification scheduling and the background-check sync, TMDB key validation, and
-the web app's offline file list, manifest and backup reminder.
+auto-backups, notification scheduling and the background-check sync, TMDB key validation, online
+accounts and sync (`tests/sync.test.js`: two devices against an in-memory stand-in for the
+server), and the web app's offline file list, manifest and backup reminder.
 Page and UI code isn't covered by tests; check it in a browser.
 
 GitHub Actions (`.github/workflows/tests.yml`) runs the same `npm test` on Node 18 for every pull

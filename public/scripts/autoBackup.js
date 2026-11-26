@@ -117,7 +117,10 @@ function runAutoBackups({ now = new Date(), force = false, profileIds = null } =
   autoBackupRunning = (async () => {
     const results = [];
     // Profiles with Settings > Auto-backup off are skipped, except for an explicit 'Back up now'.
+    // Online profiles never get one: their library is saved to the account (sync.js; decided
+    // with the user). Export data still works for them.
     const profiles = getProfiles()
+      .filter(p => !p.account)
       .filter(p => !profileIds || profileIds.includes(p.id))
       .filter(p => force || getProfilePrefs(p).autoBackup);
     for (const profile of profiles) {
