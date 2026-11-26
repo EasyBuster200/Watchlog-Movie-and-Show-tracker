@@ -6,9 +6,9 @@
 // - Signed in only (a session token), GET only, read-only TMDB paths only.
 // - Limits, so strangers can't run up the owner's quota: per account per day, and overall per
 //   day (which also protects the Worker's free 100,000 requests a day). Both are D1 counters,
-//   two small writes per request. Sign-up is open for now; it must become invite-only before
-//   online accounts are shown to everyone (decided with the user).
-// - TMDB_PROXY = "off" (a wrangler.jsonc var) pauses it without a code change.
+//   two small writes per request. The overall cap is the admin page's tmdb_daily_cap setting.
+// - The admin page's switch (setting tmdb_proxy) pauses it; so does TMDB_PROXY = "off" (a
+//   wrangler.jsonc var).
 // - Responses are kept in Cloudflare's edge cache for a while (per data centre). The docs don't
 //   promise the Cache API on workers.dev, but it works there (seen: `X-Watchlog-Cache: hit`);
 //   without it, every request would simply go to TMDB.
@@ -17,6 +17,7 @@
 
 import { route, ApiError } from '../router.js';
 import { requireAuth, rateLimit } from '../auth.js';
+import { getSettings, DEFAULT_TMDB_DAILY_CAP } from '../settings.js';
 
 const TMDB_API = 'https://api.themoviedb.org/3';
 const DAY = 24 * 60 * 60;
@@ -24,7 +25,7 @@ const TMDB_TIMEOUT_MS = 8000;
 
 export const TMDB_LIMITS = {
   perAccountPerDay: 5000,
-  totalPerDay: 40000,
+  totalPerDay: DEFAULT_TMDB_DAILY_CAP, // the default; the admin page can change it
 };
 
 // Paths are TMDB's own: letters, digits, '-', '_', '.', '/'. Account-specific endpoints are refused.
@@ -51,7 +52,8 @@ function jsonBody(body, status, extraHeaders = {}) {
 }
 
 route('GET', '/tmdb/*', async ({ request, env, ctx, params }) => {
-  if (String(env.TMDB_PROXY || 'on').toLowerCase() === 'off') {
+  const settings = await getSettings(env);
+  if (String(env.TMDB_PROXY || 'on').toLowerCase() === 'off' || settings.tmdbProxy === 'off') {
     throw new ApiError(503, 'tmdb_paused', 'Movie and show information is paused right now. Try again later.');
   }
   if (!env.TMDB_TOKEN) {
@@ -66,7 +68,7 @@ route('GET', '/tmdb/*', async ({ request, env, ctx, params }) => {
   }
 
   await rateLimit(env, `tmdb:account:${account.id}`, TMDB_LIMITS.perAccountPerDay, DAY);
-  await rateLimit(env, 'tmdb:all', TMDB_LIMITS.totalPerDay, DAY);
+  await rateLimit(env, 'tmdb:all', settings.tmdbDailyCap, DAY);
 
   const target = new URL(`${TMDB_API}/${path}`);
   new URL(request.url).searchParams.forEach((value, name) => {

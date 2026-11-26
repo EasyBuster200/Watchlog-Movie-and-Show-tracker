@@ -2,7 +2,9 @@
 // returns everything changed since this device last asked.
 //
 // Request:  { since: <cursor, 0 the first time>, changes: [{ kind, key, data, deleted, updatedAt }] }
-// Response: { cursor, changes: [{ kind, key, data, deleted, updatedAt }], more, accepted, serverTime }
+// Response: { cursor, changes: [{ kind, key, data, deleted, updatedAt }], more, accepted, serverTime,
+//             admin? }   admin: { pendingRequests } only for the owner, so every page load
+//             tells the owner's app about sign-up requests without an extra request
 //
 // - Every record is one row of sync_records (migration 0003). A deletion is kept as a tombstone
 //   (deleted: true, data: null), so devices that were offline still learn about it.
@@ -19,6 +21,7 @@
 
 import { route, json, readJson, ApiError } from '../router.js';
 import { requireAuth, rateLimit } from '../auth.js';
+import { isAdmin } from '../admin.js';
 
 export const SYNC_KINDS = ['watched_movie', 'watched_episode', 'favorite', 'list', 'list_item', 'prefs'];
 export const MAX_CHANGES_IN = 200;
@@ -95,5 +98,10 @@ route('POST', '/sync', async ({ request, env }) => {
   const more = results.length > MAX_CHANGES_OUT;
   const page = more ? results.slice(0, MAX_CHANGES_OUT) : results;
   const cursor = page.length ? page[page.length - 1].seq : since;
-  return json({ cursor, changes: page.map(changeJson), more, accepted: changes.length, serverTime: new Date().toISOString() });
+  const reply = { cursor, changes: page.map(changeJson), more, accepted: changes.length, serverTime: new Date().toISOString() };
+  if (isAdmin(env, account.id)) {
+    const pending = await env.DB.prepare("SELECT COUNT(*) AS n FROM accounts WHERE status = 'pending'").first();
+    reply.admin = { pendingRequests: pending ? pending.n : 0 };
+  }
+  return json(reply);
 });

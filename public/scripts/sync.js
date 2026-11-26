@@ -24,6 +24,10 @@
 // - It runs a moment after each page loads, a few seconds after a change, when the device comes
 //   back online, and when the app comes back to the screen; Settings has "Sync now".
 //
+// - For the owner, each sync reply also says how many people are waiting to join
+//   (reply.admin.pendingRequests). It's kept on the profile (account.isAdmin, pendingRequests)
+//   and shown as a banner linking to the admin page.
+//
 // Load after serverApi.js, on pages that load localApi.js.
 
 const SYNC_BATCH_MAX = 200; // the server's MAX_CHANGES_IN
@@ -263,18 +267,21 @@ async function applyListItemRecord(db, change) {
 
 async function applySyncChange(db, change, profile) {
   const { kind, key, data, deleted } = change;
+  // Pages sort by these times, so a record without one (another device's older app) gets the
+  // change's own time.
+  const at = change.updatedAt || new Date().toISOString();
   switch (kind) {
     case 'watched_movie':
       if (deleted) return dbDelete(db, 'watched_movies', Number(key));
-      return dbPut(db, 'watched_movies', { ...data, tmdbId: Number(key) });
+      return dbPut(db, 'watched_movies', { ...data, tmdbId: Number(key), watchedAt: data.watchedAt || at });
     case 'watched_episode':
       if (deleted) return dbDelete(db, 'watched_episodes', key);
       return dbPut(db, 'watched_episodes', {
-        key, showId: Number(data.showId), seasonNumber: Number(data.seasonNumber), episodeNumber: Number(data.episodeNumber), watchedAt: data.watchedAt,
+        key, showId: Number(data.showId), seasonNumber: Number(data.seasonNumber), episodeNumber: Number(data.episodeNumber), watchedAt: data.watchedAt || at,
       });
     case 'favorite':
       if (deleted) return dbDelete(db, 'favorites', key);
-      return dbPut(db, 'favorites', { ...data, key, tmdbId: Number(data.tmdbId) });
+      return dbPut(db, 'favorites', { ...data, key, tmdbId: Number(data.tmdbId), favoritedAt: data.favoritedAt || at });
     case 'list': {
       if (key === WATCHLIST_SYNC_ID) return undefined;
       if (deleted) {
@@ -385,6 +392,7 @@ async function runSync() {
       const reply = await accountRequest(getActiveProfile() || profile, 'POST', '/v1/sync', { since: state.cursor, changes: batch.map(wireChange) });
       const offset = measureClockOffset(reply.serverTime, sentAt, Date.now());
       if (offset !== null) state = { ...state, clockOffsetMs: offset };
+      if (round === 0) noteAdminNews(profile, reply.admin);
       received += await applyIncomingChanges(db, reply.changes || [], profile);
       await clearSentChanges(db, batch);
       sent += batch.length;
@@ -403,6 +411,14 @@ async function runSync() {
   const result = { status: 'synced', sent, received };
   announceSync(result);
   return result;
+}
+
+// The owner's sign-up requests, from the sync reply (absent for everyone else).
+function noteAdminNews(profile, admin) {
+  const current = getProfiles().find(p => p.id === profile.id);
+  if (!current || !current.account) return;
+  if (admin) updateAccountFields(profile.id, { isAdmin: true, pendingRequests: Number(admin.pendingRequests) || 0 });
+  else if (current.account.isAdmin) updateAccountFields(profile.id, { isAdmin: false, pendingRequests: 0 });
 }
 
 function announceSync(detail) {
@@ -467,6 +483,7 @@ async function autoSync(force = false) {
     }
     const result = await withSyncLock(profile, syncNow);
     if (result && result.received > 0) showSyncedChanges();
+    else showJoinRequests();
   } catch (error) {
     console.warn('Sync failed:', error);
   }
@@ -498,6 +515,40 @@ function showSyncedChanges() {
     return;
   }
   offerRefreshAfterSync();
+}
+
+// "2 people want to join · Review", for the owner, until they look (per browser session and count).
+const JOIN_BANNER_KEY = 'watchlog_join_banner_seen';
+
+function showJoinRequests() {
+  if (typeof document === 'undefined' || document.querySelector('.sync-toast')) return;
+  if (/\/admin(\.html)?$/.test(window.location.pathname)) return;
+  const profile = getActiveProfile();
+  const count = profile && profile.account && profile.account.isAdmin ? Number(profile.account.pendingRequests) || 0 : 0;
+  if (!count) return;
+  try {
+    if (sessionStorage.getItem(JOIN_BANNER_KEY) === String(count)) return;
+  } catch (error) { /* no storage: just show it */ }
+  const toast = document.createElement('div');
+  toast.className = 'sync-toast';
+  toast.setAttribute('role', 'status');
+  const text = document.createElement('span');
+  text.textContent = count === 1 ? '1 person wants to join' : `${count} people want to join`;
+  const review = document.createElement('a');
+  review.className = 'sync-toast__action';
+  review.href = 'admin.html#requests';
+  review.textContent = 'Review';
+  const dismiss = () => {
+    try { sessionStorage.setItem(JOIN_BANNER_KEY, String(count)); } catch (error) { /* fine */ }
+  };
+  review.addEventListener('click', dismiss);
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.setAttribute('aria-label', 'Dismiss');
+  close.textContent = '×';
+  close.addEventListener('click', () => { dismiss(); toast.remove(); });
+  toast.append(text, review, close);
+  document.body.appendChild(toast);
 }
 
 function offerRefreshAfterSync() {

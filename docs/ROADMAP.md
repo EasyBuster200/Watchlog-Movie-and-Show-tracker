@@ -92,7 +92,7 @@ Do this first: it works with today's local profiles and needs no backend.
 
 ## Phase 3: Accounts
 
-**In progress, in three parts:** **3a, the server** (accounts, account keys, sessions, pairing codes, device list, rate limits; built, see `docs/DEVELOPMENT.md`, "Accounts API"); **3b, the app** (create or sign in to an online account, save the key, add a device, the device list, upgrade a local profile; built, hidden until Phase 4 sync exists, see `docs/DEVELOPMENT.md`, "Accounts in the app"; online accounts use the owner's TMDB token through the Phase 5 proxy, built alongside; signing out asks whether to keep a copy on the device or remove it, decided with the user); **3c, the recovery email** (once there's a domain). Decided with the user: the recovery email is **required** (accounts made before 3c will be asked to add one), the recovery hold is **24 hours**, and sign-up is **open for now** with rate limits, until the admin page can make invites. Online accounts keep using their own TMDB token until Phase 5.
+**In progress, in three parts:** **3a, the server** (accounts, account keys, sessions, pairing codes, device list, rate limits; built, see `docs/DEVELOPMENT.md`, "Accounts API"); **3b, the app** (create or sign in to an online account, save the key, add a device, the device list, upgrade a local profile; built, see `docs/DEVELOPMENT.md`, "Accounts in the app"; shown to everyone since the admin page (Phase 8 part 1) made sign-up approval-based; online accounts use the owner's TMDB token through the Phase 5 proxy, built alongside; signing out asks whether to keep a copy on the device or remove it, decided with the user); **3c, the recovery email** (once there's a domain). Decided with the user: the recovery email is **required** (accounts made before 3c will be asked to add one), the recovery hold is **24 hours**, and sign-up was **open** with rate limits until the admin page added sign-up modes (approval by default). Online accounts keep using their own TMDB token until Phase 5.
 
 ### Two kinds of account
 
@@ -142,7 +142,7 @@ Sign-up is **open for now** (decided with the user): creating accounts is rate-l
 
 ## Phase 4: Sync
 
-**Built, in two parts:** **4a, the server** (`POST /v1/sync`, see `docs/DEVELOPMENT.md`, "Sync API") and **4b, the app** (`public/scripts/sync.js`: recording changes, sending and receiving them, applying them to the device; `docs/DEVELOPMENT.md`, "Sync in the app"). Online accounts stay behind the preview switch until sign-up is invite-only. Decided with the user:
+**Built, in two parts:** **4a, the server** (`POST /v1/sync`, see `docs/DEVELOPMENT.md`, "Sync API") and **4b, the app** (`public/scripts/sync.js`: recording changes, sending and receiving them, applying them to the device; `docs/DEVELOPMENT.md`, "Sync in the app"). Online accounts were shown to everyone once the admin page (Phase 8 part 1) existed. Decided with the user:
 - Lists with the same name made on two devices before they sync are **kept apart, one renamed** ("Horror (2)").
 - **Reset all data** on an online profile **empties the library everywhere** (the server, so every signed-in device), with a clear warning.
 - **Theme, accent colour, region and language sync**; the notification and auto-backup switches stay per device.
@@ -225,6 +225,8 @@ The site and the APK are public, so assume anyone can open the app. Several laye
 
 ## Phase 6: Notifications through the server
 
+**Foundation built** with the admin page: Web Push sending (`server/src/webpush.js`, `push.js`), subscriptions per signed-in device (`/v1/push/...`), and the service worker showing notifications. Only the owner's sign-up requests use it so far; the switch is on the admin page.
+
 - **iPhone/web:** Web Push. The service worker subscribes; the Worker stores the subscription and sends pushes. iOS needs 16.4+ and the app installed to the home screen.
 - **Android:** keep today's local notifications and `EpisodeCheckWorker` at first, since they work offline and don't need the server. Moving Android to server push (Firebase Cloud Messaging) can come later if useful.
 - **Hourly cron** on the Worker:
@@ -270,6 +272,11 @@ Local accounts have no friends features.
 - Rate-limit friend requests and recommendations, against spam.
 
 ## Phase 8: Admin page
+
+**Part 1 is built** (`public/admin.html`, `server/src/routes/admin.js`; `docs/DEVELOPMENT.md`, "Admin and sign-ups"): sign-up requests (approve / decline), the sign-up mode (closed, invite-only, approval, open; **approval is the default**, decided with the user), invites, users (sign out, suspend, delete), counts, the TMDB proxy's switch and daily cap, the last backup, and the audit log. With it, online accounts stopped being hidden behind the preview switch (decided with the user). Decided differently from the plan below:
+- **The admin is an account id in the `ADMIN_ACCOUNT_IDS` Worker secret**, not a role column, and there's **no Cloudflare Access** yet: on `workers.dev` Access can only protect the whole site, not `/admin`. It can go in front of `/admin` once there's a custom domain.
+- **The owner hears about sign-up requests** as a banner on any signed-in device (from each sync) and as a **Web Push notification** (built here, Phase 6's foundation; iPhone and browsers, not the Android app). An **email** to the owner waits for the domain (with Phase 3c), decided with the user.
+- Not built yet from part 1: Turnstile, per-minute burst limits. Pending requests aren't cleaned up automatically.
 
 ### Access
 
@@ -332,7 +339,7 @@ People's watch history and lists are **not** visible on the admin page. It shows
 2. Phase 2: backend foundation
 3. Phase 3: accounts (account key, device pairing, recovery email, invites, local vs online, upgrade a local account)
 4. Phase 5: TMDB proxy (so online accounts need no token); can be built alongside Phase 3
-5. Phase 8 (part 1): admin page with users, invites, limits and kill switch. **Needed before inviting anyone.**
+5. Phase 8 (part 1): admin page with users, invites, limits and kill switch. **Done** (after Phase 4), with Web Push for sign-up requests.
 6. Phase 4: sync, then remove auto-backup and add the local-account backup reminder
 7. Phase 6: server notifications
 8. Phase 7: friends

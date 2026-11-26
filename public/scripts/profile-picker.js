@@ -11,19 +11,18 @@
 //   Online accounts (roadmap Phase 3; calls in serverApi.js):
 //   signin    Sign in with the account key
 //   pair      Sign in with a one-time code from a signed-in device
-//   create    Create an account: just a name, then save-key
+//   create    Create an account: a name, plus what the owner's sign-up mode asks for (an invite
+//             code, or a note saying who you are), then save-key. Also turns an offline profile
+//             into an online one (?screen=create&upgrade=<profile id>, from Settings).
+//   waiting   Waiting for the owner's approval (sign-up mode 'approval'): check again, or
+//             withdraw the request
 //   Online profiles need no TMDB token: they use the server's TMDB proxy, which has the owner's
 //   (localApi.js's tmdbAccess). Only offline profiles bring their own.
 //   save-key  The account key, with Copy / Save as file and a "type the last 4" check. Also
 //             opened from Settings: profile-picker.html?screen=save-key&profile=<id>&next=<page>
 //   recover / inbox
 //             The recovery email (roadmap Phase 3c); not built yet, so they say so.
-//   Hidden behind onlineAccountsEnabled() (serverApi.js) until syncing exists (decided with the
-//   user): no button leads to them while it's off.
-//
 // The screens are plain DOM built from media.js's helpers (ttIcon, buildTextField, el).
-
-const ONLINE_ACCOUNTS = onlineAccountsEnabled();
 
 const authEl = document.getElementById('auth');
 const importInput = document.getElementById('import-backup-input');
@@ -94,7 +93,7 @@ function errorLine() {
 // Offline profile + Import backup, side by side.
 function secondaryPair() {
   const row = el('div', 'auth__pair');
-  row.appendChild(button('Offline profile', 'secondary', () => show('offline'), { icon: ONLINE_ACCOUNTS ? null : 'plus' }));
+  row.appendChild(button('Offline profile', 'secondary', () => show('offline')));
   row.appendChild(button('Import backup', 'secondary', () => show('import')));
   return row;
 }
@@ -111,11 +110,13 @@ function show(screen, opts = {}) {
 
 function profileMeta(profile) {
   const meta = el('span', 'auth-profile__meta');
-  // An online profile carries its `account` (serverApi.js). Syncing comes with roadmap Phase 4,
-  // so it says "Online account", not "Synced", until then.
-  if (profile.account) {
+  // An online profile carries its `account` (serverApi.js).
+  if (isPendingAccount(profile) && isSignedIn(profile)) {
+    meta.innerHTML = ttIcon('clock', { size: 14 });
+    meta.appendChild(document.createTextNode('Waiting for approval'));
+  } else if (profile.account) {
     meta.innerHTML = ttIcon('cloud', { size: 14 });
-    meta.appendChild(document.createTextNode(isSignedIn(profile) ? 'Online account' : 'Online account · signed out'));
+    meta.appendChild(document.createTextNode(isSignedIn(profile) ? 'Synced' : 'Online account · signed out'));
   } else {
     meta.innerHTML = ttIcon('lock', { size: 14 });
     meta.appendChild(document.createTextNode('Offline · this device only'));
@@ -126,6 +127,10 @@ function profileMeta(profile) {
 // A signed-out online profile signs in again; a profile with neither a session nor its own
 // token (an offline copy kept at sign-out) gets a token first. Everything else just opens.
 function openProfileFromList(profile) {
+  if (isPendingAccount(profile) && isSignedIn(profile)) {
+    show('waiting', { profileId: profile.id });
+    return;
+  }
   if (profile.account && !isSignedIn(profile) && !profile.tmdbApiKey) {
     setActiveProfileId(profile.id);
     show('signin');
@@ -189,10 +194,10 @@ function renderHome() {
   }
 
   const actions = el('div', 'auth__actions');
-  if (ONLINE_ACCOUNTS) actions.appendChild(button('Sign in', 'primary', () => show('signin')));
+  actions.appendChild(button('Sign in', 'primary', () => show('signin')));
   actions.appendChild(secondaryPair());
   authEl.appendChild(actions);
-  if (ONLINE_ACCOUNTS) authEl.appendChild(promptLine('New to Watchlog?', 'Create an account', () => show('create')));
+  authEl.appendChild(promptLine('New to Watchlog?', 'Create an account', () => show('create')));
 }
 
 // ---------- New offline profile / Edit / last step of a restore ----------
@@ -368,7 +373,7 @@ function renderRestore() {
 
   const actions = el('div', 'auth__actions');
   actions.appendChild(button('Restore as offline profile', 'primary', () => show('offline', { restore: pendingRestore })));
-  if (ONLINE_ACCOUNTS) actions.appendChild(button('Sign in and restore to my account', 'secondary', () => show('signin', { restore: pendingRestore })));
+  actions.appendChild(button('Sign in and restore to my account', 'secondary', () => show('signin', { restore: pendingRestore })));
   authEl.appendChild(actions);
   authEl.appendChild(el('p', 'auth__fine', legacyBackupApiKey(payload)
     ? 'This backup has a TMDB token; you can check it on the next step.'
@@ -377,9 +382,15 @@ function renderRestore() {
 
 // ---------- Online accounts (serverApi.js; hidden until syncing exists) ----------
 
-// Opens a profile, or the page that sent us here (Settings, after saving a new key).
+// Opens a profile, or the page that sent us here (Settings, after saving a new key). A profile
+// still waiting for approval goes to the waiting screen instead.
 function openProfile(profileId, next = 'main.html') {
   setActiveProfileId(profileId);
+  const profile = getProfiles().find(p => p.id === profileId);
+  if (isPendingAccount(profile)) {
+    show('waiting', { profileId });
+    return;
+  }
   window.location.href = next;
 }
 
@@ -489,39 +500,143 @@ function renderPair({ restore = null } = {}) {
   authEl.appendChild(el('p', 'auth__fine', 'Codes work once and expire after 10 minutes.'));
 }
 
-function renderCreate() {
-  authEl.appendChild(backButton(() => show('home')));
-  authEl.appendChild(authHead({ title: 'Create your account', text: 'Track what you watch and pick up where you left off on any device.', centred: true }));
+// What the owner's sign-up mode asks for (serverApi.js's getSignupMode):
+//   open / first account  a name
+//   invite                a name and an invite code
+//   approval              a name, a note for the owner, and an optional invite code (which skips
+//                         the wait)
+//   closed                nothing: it says so
+// `upgrade` is an offline profile (from Settings) that becomes this account, keeping its library.
+async function renderCreate({ upgrade = null } = {}) {
+  const upgrading = upgrade ? getProfiles().find(p => p.id === upgrade && !p.account) : null;
+  authEl.appendChild(backButton(() => (upgrading ? openProfile(upgrading.id, 'settings.html') : show('home'))));
+  const head = authHead({
+    title: upgrading ? 'Make it an online account' : 'Create your account',
+    text: 'Track what you watch and pick up where you left off on any device.',
+    centred: true,
+  });
+  authEl.appendChild(head);
+  const loading = el('p', 'auth__fine', 'Checking who can join…');
+  authEl.appendChild(loading);
+
+  let mode = 'open';
+  try {
+    mode = (await getSignupMode()).mode;
+  } catch (err) {
+    // Offline or no server: show the plain form; creating the account will say what's wrong.
+  }
+  loading.remove();
+
+  if (mode === 'closed') {
+    authEl.appendChild(el('p', 'auth__text', "Sign-ups are closed right now. If you know the owner of this Watchlog, ask them to open them or send you an invite."));
+    authEl.appendChild(promptLine('Already have an account?', 'Sign in', () => show('signin')));
+    return;
+  }
+  if (mode === 'approval') head.appendChild(el('p', 'auth__text', "The owner lets new people in. Ask below; you can use your account once they've approved it."));
+
   const form = el('form', 'auth__form');
   form.noValidate = true;
   const nameField = buildTextField({ label: 'Name', icon: 'user', placeholder: 'Your name', autocomplete: 'nickname', maxLength: 40 });
+  if (upgrading) nameField.input.value = upgrading.displayName;
   form.appendChild(nameField);
+  let noteField = null;
+  if (mode === 'approval') {
+    noteField = buildTextField({ label: 'A note for the owner', icon: 'mail', placeholder: "e.g. Ana's brother", maxLength: 200, helper: 'So they know who you are.' });
+    form.appendChild(noteField);
+  }
+  let inviteField = null;
+  if (mode === 'invite' || mode === 'approval') {
+    inviteField = buildTextField({
+      label: mode === 'invite' ? 'Invite code' : 'Invite code (if you have one)',
+      icon: 'lock', placeholder: 'XXXX-XXXX', autocomplete: 'off', maxLength: 12,
+      helper: mode === 'invite' ? 'The owner of this Watchlog gives these out.' : "With one, you're in straight away.",
+    });
+    inviteField.input.spellcheck = false;
+    inviteField.input.autocapitalize = 'characters';
+    form.appendChild(inviteField);
+  }
   const error = errorLine();
   form.appendChild(error);
-  const submit = button('Create account', 'primary', null, { type: 'submit' });
+  const submit = button(mode === 'approval' ? 'Ask to join' : 'Create account', 'primary', null, { type: 'submit' });
   form.appendChild(submit);
   form.appendChild(el('p', 'auth__fine', "Next, you'll get an account key: a long code that signs you in on any device. Keep it somewhere safe. A recovery email is coming in an update."));
   form.addEventListener('submit', async event => {
     event.preventDefault();
     const displayName = nameField.input.value.trim();
+    const inviteCode = inviteField ? inviteField.input.value.trim() : '';
     nameField.setError(displayName ? null : 'Enter a name.');
-    if (!displayName) return;
+    if (inviteField) inviteField.setError(mode === 'invite' && !inviteCode ? 'Enter your invite code.' : null);
+    if (!displayName || (mode === 'invite' && !inviteCode)) return;
     error.show('');
     submit.disabled = true;
     try {
-      const created = await createOnlineAccount(displayName);
-      const profile = createProfile({ displayName: created.account.displayName, tmdbApiKey: null });
+      const created = await createOnlineAccount(displayName, { inviteCode, note: noteField ? noteField.input.value.trim() : null });
+      const profile = upgrading || createProfile({ displayName: created.account.displayName, tmdbApiKey: null });
       linkProfileToAccount(profile.id, created, { accountKey: created.accountKey });
-      show('save-key', { profileId: profile.id });
+      show('save-key', { profileId: profile.id, next: upgrading ? 'settings.html' : 'main.html' });
     } catch (err) {
       console.error('Creating an account failed:', err);
-      error.show(err.message || 'Something went wrong. Try again.');
+      if (inviteField && ['wrong_invite', 'invite_required'].includes(err.code)) inviteField.setError(err.message);
+      else error.show(err.message || 'Something went wrong. Try again.');
     } finally {
       submit.disabled = false;
     }
   });
   authEl.appendChild(form);
-  authEl.appendChild(promptLine('Already have an account?', 'Sign in', () => show('signin')));
+  if (!upgrading) authEl.appendChild(promptLine('Already have an account?', 'Sign in', () => show('signin')));
+}
+
+// Waiting for the owner's approval. "Check again" asks the server; once approved, the profile
+// opens. If the request was declined (the account deleted), it says so.
+function renderWaiting({ profileId }) {
+  const profile = getProfiles().find(p => p.id === profileId);
+  if (!profile || !profile.account) { show('home'); return; }
+  authEl.appendChild(backButton(() => { clearActiveProfile(); show('home'); }));
+  const head = el('div', 'auth__head auth__head--centred');
+  const badge = el('div', 'auth__badge');
+  badge.innerHTML = ttIcon('clock', { size: 24 });
+  head.appendChild(badge);
+  head.appendChild(el('h1', 'auth__title', 'Waiting for approval'));
+  head.appendChild(el('p', 'auth__text', `The owner of this Watchlog needs to let "${profile.account.displayName}" in. Check back any time.`));
+  authEl.appendChild(head);
+  const status = el('p', 'auth__fine');
+  status.setAttribute('role', 'status');
+  const check = button('Check again', 'primary', async () => {
+    check.disabled = true;
+    status.textContent = 'Checking…';
+    try {
+      const data = await refreshOnlineAccount(profile);
+      if (data.account.status === 'active') {
+        openProfile(profileId);
+        return;
+      }
+      status.textContent = 'Still waiting. You can close the app; your place is kept.';
+    } catch (err) {
+      status.textContent = err.code === 'signed_out'
+        ? "This request was declined or removed. You can withdraw it below, or ask the owner."
+        : err.message;
+    } finally {
+      check.disabled = false;
+    }
+  });
+  authEl.appendChild(check);
+  authEl.appendChild(status);
+  authEl.appendChild(promptLine('Changed your mind?', 'Withdraw the request', async () => {
+    const ok = await confirmDialog({
+      title: 'Withdraw your request?',
+      message: profile.tmdbApiKey
+        ? 'The request is deleted. This profile stays on this device as an offline profile.'
+        : 'The request and this profile on this device are deleted.',
+      confirmLabel: 'Withdraw',
+      danger: true,
+    });
+    if (!ok) return;
+    if (isSignedIn(profile)) await deleteOnlineAccount(profile).catch(() => unlinkProfileAccount(profile.id));
+    else unlinkProfileAccount(profile.id);
+    if (!profile.tmdbApiKey) deleteProfile(profile.id);
+    clearActiveProfile();
+    show('home');
+  }));
 }
 
 function keyFileText(profile) {
@@ -654,11 +769,13 @@ const SCREENS = {
   'save-key': renderSaveKey,
   recover: renderRecover,
   inbox: renderInbox,
+  waiting: renderWaiting,
 };
 
 // Other pages can open a screen directly: ?screen=save-key&profile=<id>&next=settings.html
 // (Settings, after a new key), ?screen=offline&profile=<id>&notice=token (a signed-out copy
-// that needs its own token), or ?screen=signin (a signed-out profile).
+// that needs its own token), ?screen=signin (a signed-out profile), ?screen=create&upgrade=<id>
+// (Settings' "Make this an online account") or ?screen=waiting&profile=<id> (waiting for approval).
 (function start() {
   const params = new URLSearchParams(window.location.search);
   const screen = params.get('screen');
@@ -667,7 +784,11 @@ const SCREENS = {
     show('offline', { profile: profileParam, notice: params.get('notice') === 'token' ? "You're signed out, so this copy needs your own TMDB token to keep working offline." : null });
   } else if (screen === 'save-key' && params.get('profile')) {
     show('save-key', { profileId: params.get('profile'), next: params.get('next') || 'main.html' });
-  } else if (ONLINE_ACCOUNTS && (screen === 'signin' || screen === 'create')) {
+  } else if (screen === 'waiting' && profileParam) {
+    show('waiting', { profileId: profileParam.id });
+  } else if (screen === 'create') {
+    show('create', { upgrade: params.get('upgrade') });
+  } else if (screen === 'signin') {
     show(screen);
   } else {
     show('home');

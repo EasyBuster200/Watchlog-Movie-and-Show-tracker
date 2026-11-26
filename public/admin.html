@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#14151c">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Watchlog">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="robots" content="noindex">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="images/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="images/apple-touch-icon.png">
+  <title>Admin</title>
+  <link rel="stylesheet" href="styles/tokens.css">
+  <link rel="stylesheet" href="styles/style.css">
+  <script type="text/javascript" src="scripts/theme.js"></script>
+  <script type="text/javascript" src="scripts/pwa.js" defer></script>
+  <script type="text/javascript" src="scripts/profiles.js" defer></script>
+  <script type="text/javascript" src="scripts/serverApi.js" defer></script>
+  <script type="text/javascript" src="scripts/media.js" defer></script>
+  <script type="text/javascript" src="scripts/admin.js" defer></script>
+</head>
+<body>
+  <!-- The owner's admin page (admin.js): not linked from the app except from the owner's own
+       Settings and the "people want to join" banner. Everything is drawn into #admin. -->
+  <main class="screen admin">
+    <div class="page-header__row">
+      <button type="button" class="tt-back" data-back="settings.html" aria-label="Back">
+        <svg class="tt-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg>
+      </button>
+      <h1 class="screen-title">Admin</h1>
+    </div>
+    <div id="admin" class="stack admin__body"></div>
+  </main>
+</body>
+</html>

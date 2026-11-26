@@ -882,6 +882,17 @@ button.settings-row:disabled { cursor: default; opacity: 0.5; background: none; 
 .actor-head__line { font-size: 13px; line-height: 19px; color: var(--text-secondary); }
 .clamp--3 { -webkit-line-clamp: 3; }
 
+/* ---------- Admin page (admin.html / admin.js) ---------- */
+.admin__body { gap: var(--space-6); }
+.admin-row { align-items: center; }
+.admin-row__actions { display: flex; flex-shrink: 0; gap: var(--space-2); }
+.admin-btn { min-height: 36px; padding: 6px 12px; font-size: 13px; }
+.admin-note { margin: var(--space-2) 0 0; }
+.admin-message { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-5); }
+.admin-message h2 { margin: 0; font-size: 18px; }
+.admin-message p { margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 20px; }
+.admin-id { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; padding: var(--space-2) var(--space-3); background: var(--bg-raised); border-radius: var(--radius-sm); overflow-wrap: anywhere; }
+
 /* ---------- Sync toast (sync.js: changes arrived from the account's other devices) ---------- */
 .sync-toast {
   position: fixed; left: var(--space-4); right: var(--space-4); z-index: 60;
@@ -892,7 +903,9 @@ button.settings-row:disabled { cursor: default; opacity: 0.5; background: none; 
   border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
   box-shadow: var(--shadow-poster);
 }
+.sync-toast a.sync-toast__action { margin-left: auto; color: var(--accent-text); font-weight: 600; text-decoration: none; padding: var(--space-1) var(--space-2); }
 .sync-toast button {
   background: none; border: 0; padding: var(--space-1) var(--space-2);
   color: var(--accent-text); font: inherit; font-weight: 600; cursor: pointer;
 }
+.admin-message .tt-btn { align-self: flex-start; }

@@ -386,17 +386,16 @@ function saveKeyUrl() {
   return `profile-picker.html?screen=save-key&profile=${encodeURIComponent(user.id)}&next=settings.html`;
 }
 
+// The picker's create screen does it (it asks for whatever the sign-up mode needs: an invite
+// code, or a note for the owner), keeping this profile and its library.
 async function makeOnline() {
   const ok = await confirmDialog({
     title: 'Make this an online account?',
-    message: `"${user.displayName}" becomes an online account you can sign in to on other devices. Everything stays on this device too. Next you'll get an account key to save.`,
+    message: `"${user.displayName}" becomes an online account you can sign in to on other devices, and everything in it is kept in sync. Everything stays on this device too.`,
     confirmLabel: 'Continue',
   });
   if (!ok) return;
-  const created = await accountAction(() => createOnlineAccount(user.displayName), "Couldn't create the account");
-  if (!created) return;
-  linkProfileToAccount(user.id, created, { accountKey: created.accountKey });
-  window.location.href = saveKeyUrl();
+  window.location.href = `profile-picker.html?screen=create&upgrade=${encodeURIComponent(user.id)}`;
 }
 
 async function showAccountKey() {
@@ -595,7 +594,6 @@ async function syncFromSettings(row) {
 function onlineAccountSection() {
   const account = user.account;
   if (!account) {
-    if (!onlineAccountsEnabled()) return null;
     return settingsSection('Online account', [
       settingsRow({ label: 'Make this an online account', sub: 'Sign in to it on your other devices', onClick: makeOnline }),
     ]);
@@ -611,10 +609,16 @@ function onlineAccountSection() {
       settingsRow({ label: 'Make it an offline profile', sub: 'Keep everything on this device, without the account', onClick: () => { unlinkProfileAccount(user.id); afterLeavingAccount('keep'); } }),
     ]);
   }
+  const adminRow = account.isAdmin ? settingsRow({
+    label: 'Admin page',
+    sub: account.pendingRequests ? `${account.pendingRequests} waiting to join` : 'Sign-ups, invites, users and limits',
+    onClick: () => { window.location.href = 'admin.html'; },
+  }) : null;
   const syncRow = settingsRow({ label: 'Sync', sub: 'Checking…', value: 'Sync now', onClick: () => syncFromSettings(syncRow) });
   currentSyncRow = syncRow;
   showSyncStatus(syncRow);
   return settingsSection('Online account', [
+    adminRow,
     syncRow,
     settingsRow({
       label: 'Account key',

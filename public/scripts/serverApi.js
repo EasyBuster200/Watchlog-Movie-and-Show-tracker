@@ -8,28 +8,22 @@
 //     sessionId, sessionToken,    this device's sign-in (sessionToken null once signed out)
 //     accountKey,                 the key, only on a device that created or typed it
 //     keySavedAt,                 when the person confirmed saving the key (null = not yet)
+//     status,                     'active', or 'pending' while waiting for the owner's approval
+//     isAdmin,                    the owner (the server's ADMIN_ACCOUNT_IDS): sees the admin page
+//     pendingRequests,            for the owner: sign-up requests waiting (from each sync)
 //     linkedAt }
 // The profile's library stays in its own IndexedDB database, exactly like an offline profile's;
 // sync.js keeps it the same on the account's other devices.
 //
-// Online accounts are hidden (onlineAccountsEnabled) until sign-up is invite-only, decided with
-// the user.
-// For trying them, set localStorage 'watchlog_preview_online_accounts' to '1'.
+// Who can make an account is up to the owner (the admin page's sign-up mode: closed, invite-only,
+// approval or open). In approval mode a new account waits as 'pending' until the owner lets it
+// in; the picker's "waiting" screen checks on it.
 //
 // Load after profiles.js.
 
 const PRODUCTION_SERVER_URL = 'https://watchlog.duartecruzcoelho.workers.dev';
 // Points the app at another server (e.g. a pull request's preview) when set in localStorage.
 const SERVER_URL_OVERRIDE_KEY = 'watchlog_server_url';
-const ONLINE_ACCOUNTS_PREVIEW_KEY = 'watchlog_preview_online_accounts';
-
-function onlineAccountsEnabled() {
-  try {
-    return localStorage.getItem(ONLINE_ACCOUNTS_PREVIEW_KEY) === '1';
-  } catch (error) {
-    return false;
-  }
-}
 
 function isNativeAppPlatform() {
   return Boolean(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
@@ -159,6 +153,9 @@ function linkProfileToAccount(profileId, signIn, { accountKey = null, keySaved =
     sessionToken: signIn.token,
     accountKey: accountKey ? formatAccountKey(accountKey) : (sameAccount ? existing.accountKey || null : null),
     keySavedAt: keySaved ? new Date().toISOString() : (sameAccount ? existing.keySavedAt || null : null),
+    status: signIn.account.status || 'active',
+    isAdmin: sameAccount ? Boolean(existing.isAdmin) : false,
+    pendingRequests: sameAccount ? existing.pendingRequests || 0 : 0,
     linkedAt: sameAccount && existing.linkedAt ? existing.linkedAt : new Date().toISOString(),
   };
   return updateProfile(profileId, { account });
@@ -179,10 +176,30 @@ function isSignedIn(profile) {
   return Boolean(profile && profile.account && profile.account.sessionToken);
 }
 
+// Waiting for the owner to approve it: it can't sync or use TMDB yet.
+function isPendingAccount(profile) {
+  return Boolean(profile && profile.account && profile.account.status === 'pending');
+}
+
+function updateAccountFields(profileId, fields) {
+  const current = getProfiles().find(p => p.id === profileId);
+  if (!current || !current.account) return null;
+  return updateProfile(profileId, { account: { ...current.account, ...fields } });
+}
+
 // ---------- Signing in ----------
 
-function createOnlineAccount(displayName) {
-  return serverRequest('POST', '/v1/accounts', { body: { displayName, deviceName: guessDeviceName() } });
+// What the sign-up screen should ask for: { mode: 'closed' | 'invite' | 'approval' | 'open', firstAccount }.
+function getSignupMode() {
+  return serverRequest('GET', '/v1/signup');
+}
+
+// `inviteCode` lets the person straight in; `note` tells the owner who's asking (approval mode).
+function createOnlineAccount(displayName, { inviteCode = null, note = null } = {}) {
+  const body = { displayName, deviceName: guessDeviceName() };
+  if (inviteCode) body.inviteCode = inviteCode;
+  if (note) body.note = note;
+  return serverRequest('POST', '/v1/accounts', { body });
 }
 
 function signInWithAccountKey(accountKey) {
@@ -209,18 +226,16 @@ async function accountRequest(profile, method, path, body) {
   try {
     return await serverRequest(method, path, { body, token: profile.account.sessionToken });
   } catch (error) {
-    if (error.code === 'signed_out') {
-      const current = getProfiles().find(p => p.id === profile.id);
-      if (current && current.account) updateProfile(profile.id, { account: { ...current.account, sessionToken: null } });
-    }
+    if (error.code === 'signed_out') updateAccountFields(profile.id, { sessionToken: null });
+    if (error.code === 'account_pending') updateAccountFields(profile.id, { status: 'pending' });
     throw error;
   }
 }
 
+// Fetches the account (name, status, admin), e.g. to see whether a request was approved.
 async function refreshOnlineAccount(profile) {
   const data = await accountRequest(profile, 'GET', '/v1/account');
-  const current = getProfiles().find(p => p.id === profile.id);
-  updateProfile(profile.id, { account: { ...current.account, displayName: data.account.displayName } });
+  updateAccountFields(profile.id, { displayName: data.account.displayName, status: data.account.status || 'active', isAdmin: Boolean(data.isAdmin) });
   return data;
 }
 

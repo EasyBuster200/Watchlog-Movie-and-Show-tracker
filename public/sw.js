@@ -10,6 +10,9 @@
 // and the query string, so both spellings find the same cached page, and redirected responses
 // are re-wrapped before caching (Safari refuses to show a cached redirect for a navigation).
 //
+// It also shows Web Push notifications (the owner's "someone wants to join", server/src/push.js):
+// the payload is JSON { title, body, url, tag }, and tapping one opens `url` in the app.
+//
 // PRECACHE lists the app's files so they're available offline right after install, not only
 // once visited. tests/pwa.test.js checks it against what's in public/, so a new page or script
 // that isn't added here fails the tests.
@@ -28,6 +31,7 @@ const PRECACHE = [
   'profile.html',
   'profile-picker.html',
   'settings.html',
+  'admin.html',
   'licences.html',
   'detail.html',
   'episodes.html',
@@ -62,6 +66,7 @@ const PRECACHE = [
   'scripts/profile.js',
   'scripts/profile-picker.js',
   'scripts/settings.js',
+  'scripts/admin.js',
   'scripts/detail.js',
   'scripts/episodes.js',
   'scripts/person.js',
@@ -146,6 +151,39 @@ async function networkFirst(request) {
     return network; // nothing cached: keep waiting for the network (or fail with its error)
   }
 }
+
+// ---------- Push notifications ----------
+
+self.addEventListener('push', event => {
+  let message = {};
+  try {
+    message = event.data ? event.data.json() : {};
+  } catch (error) {
+    message = { body: event.data ? event.data.text() : '' };
+  }
+  // iPhone requires every push to show a notification, so there's always one.
+  event.waitUntil(self.registration.showNotification(message.title || 'Watchlog', {
+    body: message.body || '',
+    tag: message.tag || undefined,
+    icon: 'images/icon-192.png',
+    badge: 'images/icon-192.png',
+    data: { url: message.url || 'main.html' },
+  }));
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const url = new URL((event.notification.data && event.notification.data.url) || 'main.html', self.registration.scope).href;
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const open = windows.find(w => w.url.startsWith(self.registration.scope));
+    if (open) {
+      await open.focus();
+      return open.navigate ? open.navigate(url) : undefined;
+    }
+    return self.clients.openWindow(url);
+  })());
+});
 
 self.addEventListener('fetch', event => {
   const { request } = event;
