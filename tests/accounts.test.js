@@ -74,7 +74,7 @@ test('checking the account picks up approval and the admin flag; a 403 "pending"
 test('the web app uses its own address; the Android app the production server; an override wins', () => {
   assert.equal(createApp().run('serverBaseUrl()'), 'http://localhost');
   const native = createApp({ native: true });
-  assert.equal(native.run('serverBaseUrl()'), 'https://watchlog.duartecruzcoelho.workers.dev');
+  assert.equal(native.run('serverBaseUrl()'), 'https://watchlogtracker.com');
   native.context.localStorage.setItem('watchlog_server_url', 'https://pr-9-watchlog.example.dev/');
   assert.equal(native.run('serverBaseUrl()'), 'https://pr-9-watchlog.example.dev');
 });

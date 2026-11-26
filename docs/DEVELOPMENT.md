@@ -138,6 +138,19 @@ is how Watchlog runs on an iPhone without the App Store: open the site in Safari
 - **Notifications** on the web come from the server, for online accounts ("Server notifications"
   below). Offline profiles in the web app have none.
 
+### The domain
+
+The app's address is **watchlogtracker.com**: a Custom Domain of the `watchlog` Worker
+(dashboard: Workers & Pages → watchlog → Settings → Domains & Routes). `www.watchlogtracker.com`
+is a second Custom Domain, sent on to the bare domain by a Redirect Rule on the zone ("Redirect
+from WWW to root": `https://www.*` → `https://${1}`, 308, query string kept), so everyone uses
+one address (a web app's data belongs to its exact address). The Android app's server is the
+domain too (`serverApi.js`'s `PRODUCTION_SERVER_URL`).
+
+The first address, `watchlog.duartecruzcoelho.workers.dev`, is being switched off (decided
+with the user): the **Production** workers.dev toggle on that page. Keep the **Preview** toggle on:
+pull request previews still live on workers.dev.
+
 ### Hosting on Cloudflare
 
 The site is hosted for free as a [Cloudflare Worker](https://developers.cloudflare.com/workers/static-assets/),
@@ -171,7 +184,7 @@ Two more traps in that page:
   Production / Previews Base switch has been seen showing the other tab's values. After a change,
   reload the page and check both tabs.
 
-Every push to `main` then deploys the site, live at **https://watchlog.duartecruzcoelho.workers.dev**,
+Every push to `main` then deploys the site, live at **https://watchlogtracker.com** ("The domain" below),
 and every other branch gets its own preview address, `https://<branch>-watchlog.<subdomain>.workers.dev`
 (the pull request's "Workers Builds" check links to the build, whose **Visit** button opens it),
 which can be opened on a phone to try a change before merging. `wrangler preview` refuses to run
@@ -204,7 +217,7 @@ friends). It's plain JavaScript with no dependencies, in `server/`:
   dashboard under the Worker's **Observability** tab). Routes live in `server/src/routes/` and
   register with `router.js`'s `route()`; a handler can throw an `ApiError` for an expected
   failure. `GET /v1/health` says whether the database answers and which migration it's on, e.g.
-  https://watchlog.duartecruzcoelho.workers.dev/v1/health.
+  https://watchlogtracker.com/v1/health.
 - **CORS:** pages on the site's own address (including previews) can call the API; other origins
   only if listed in `ALLOWED_ORIGINS` (`wrangler.jsonc`), currently the Android app's
   `https://localhost`. CORS isn't authentication: signed-in requests carry a session token.

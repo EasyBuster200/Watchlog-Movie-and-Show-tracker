@@ -192,7 +192,7 @@ test("an online profile's background check goes through the Watchlog server with
   const config = app.background.last();
   assert.equal(config.enabled, true);
   assert.equal(config.apiKey, 'session-token');
-  assert.equal(config.tmdbBaseUrl, 'https://watchlog.duartecruzcoelho.workers.dev/v1/tmdb');
+  assert.equal(config.tmdbBaseUrl, 'https://watchlogtracker.com/v1/tmdb');
   assert.ok(app.serverRequests.some(r => r.path === '/v1/tmdb/tv/10' && r.headers.Authorization === 'Bearer session-token'), "the app's own TMDB requests use the proxy too");
 });
 
