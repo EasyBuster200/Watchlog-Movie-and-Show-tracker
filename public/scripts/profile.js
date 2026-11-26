@@ -80,6 +80,12 @@ function renderWebBackupReminder(user) {
 // is, or anything that needs attention (a failed write, an older file it couldn't delete, or
 // auto-backup being switched off in Settings).
 function renderAutoBackupStatus(user) {
+  // An online profile's library is saved to its account (sync.js), so no backup reminders.
+  if (user.account) {
+    if (isSignedIn(user)) showBackupStatus('Saved to your online account', 'Synced with your other devices');
+    else showBackupStatus('Signed out', "Changes on this device aren't saved online until you sign in again (Settings).", { warning: true });
+    return;
+  }
   if (!isNativeApp()) {
     renderWebBackupReminder(user);
     return;

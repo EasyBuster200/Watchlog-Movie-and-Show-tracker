@@ -38,6 +38,8 @@ test("a change from one device reaches the other, and each device's cursor only 
   assert.deepEqual(onPhone.body.changes.map(c => c.key), ['550']);
   assert.equal(onPhone.body.cursor, 1);
 
+  assert.ok(Math.abs(Date.parse(onPhone.body.serverTime) - Date.now()) < 5000, 'the reply says what time the server has');
+
   const nothingNew = await sync(env, phone, onPhone.body.cursor, []);
   assert.deepEqual(nothingNew.body.changes, []);
   assert.equal(nothingNew.body.cursor, 1, 'an empty reply keeps the cursor');

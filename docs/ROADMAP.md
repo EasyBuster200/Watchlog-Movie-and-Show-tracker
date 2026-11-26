@@ -142,11 +142,15 @@ Sign-up is **open for now** (decided with the user): creating accounts is rate-l
 
 ## Phase 4: Sync
 
-**In progress, in two parts:** **4a, the server** (built: `POST /v1/sync`, see `docs/DEVELOPMENT.md`, "Sync API") and **4b, the app** (recording changes, sending and receiving them, applying them to the device). Decided with the user:
+**Built, in two parts:** **4a, the server** (`POST /v1/sync`, see `docs/DEVELOPMENT.md`, "Sync API") and **4b, the app** (`public/scripts/sync.js`: recording changes, sending and receiving them, applying them to the device; `docs/DEVELOPMENT.md`, "Sync in the app"). Online accounts stay behind the preview switch until sign-up is invite-only. Decided with the user:
 - Lists with the same name made on two devices before they sync are **kept apart, one renamed** ("Horror (2)").
 - **Reset all data** on an online profile **empties the library everywhere** (the server, so every signed-in device), with a clear warning.
 - **Theme, accent colour, region and language sync**; the notification and auto-backup switches stay per device.
 - Lists get a shared sync id (the Watchlist a fixed one); the app keeps using its device-local list numbers, so pages don't change.
+
+**How it was built** differs from the plan below in a few places: one `POST /v1/sync` both sends and receives (not separate push and pull); record keys are `550` (watched movie), `1399:1:1` (episode), `movie:550` (favourite), the list's sync id, and `<list sync id>:movie:550` (list item); the notification switches don't sync (decided with the user). From "Effects on the rest of the app", decided differently: **only online profiles** stop auto-backing up (their library is on the account); offline Android profiles keep the weekly file, since nothing else protects them.
+
+**Also decided with the user:** a page the person hasn't touched reloads itself when changes arrive (a touched one shows a Refresh notice); a copy kept at sign-out stays a separate offline profile, and signing in again starts from the account; changes are stamped with the server's clock (each sync reply carries `serverTime`), so a device with a wrong clock still has its newest change win.
 
 **Backups and the CPU limit (solved):** the weekly R2 backup used to build the dump inside the Worker, which would outgrow the free plan's 10 ms of CPU per Cron run once synced libraries fill `sync_records`. It now asks D1 to export the database and only streams the finished file into R2 (decided with the user, over a GitHub Action or a backup split across runs). It needs the `BACKUP_API_TOKEN` secret (`docs/DEVELOPMENT.md`, "Server database").
 

@@ -426,7 +426,9 @@ async function removeFromWatchlist(db, tmdbId, mediaType) {
   if (!watchlist) return;
   const items = await dbGetAllByIndex(db, 'list_items', 'listId', watchlist.id);
   const match = items.find(i => i.tmdbId === Number(tmdbId) && i.mediaType === mediaType);
-  if (match) await dbDelete(db, 'list_items', match.id);
+  if (!match) return;
+  await dbDelete(db, 'list_items', match.id);
+  await recordSyncChanges(db, [syncTombstone('list_item', listItemSyncKey(watchlist.syncId, mediaType, Number(tmdbId)))]);
 }
 
 route('GET', '/api/lists', async () => {
@@ -451,7 +453,9 @@ route('POST', '/api/lists', async (params, searchParams, getBody) => {
   if (lists.some(l => l.name === name)) {
     return jsonResponse({ error: 'You already have a list with that name' }, 409);
   }
-  const id = await dbAdd(db, 'lists', { name, isDefault: false, createdAt: new Date().toISOString() });
+  const list = { name, isDefault: false, syncId: newSyncId(), createdAt: new Date().toISOString() };
+  const id = await dbAdd(db, 'lists', list);
+  await recordSyncChanges(db, [syncRecordForList(list)]);
   return jsonResponse({ id, name, is_default: 0, item_count: 0 }, 201);
 });
 
@@ -472,6 +476,10 @@ route('DELETE', '/api/lists/:listId', async ({ listId }) => {
   const items = await dbGetAllByIndex(db, 'list_items', 'listId', list.id);
   await Promise.all(items.map(item => dbDelete(db, 'list_items', item.id)));
   await dbDelete(db, 'lists', list.id);
+  await recordSyncChanges(db, [
+    ...items.map(item => syncTombstone('list_item', listItemSyncKey(list.syncId, item.mediaType, item.tmdbId))),
+    syncTombstone('list', list.syncId),
+  ]);
   return jsonResponse({});
 });
 
@@ -502,7 +510,9 @@ route('POST', '/api/lists/:listId/items', async ({ listId }, searchParams, getBo
   }
 
   try {
-    await dbAdd(db, 'list_items', { listId: list.id, tmdbId, mediaType, addedAt: new Date().toISOString() });
+    const item = { listId: list.id, tmdbId, mediaType, addedAt: new Date().toISOString() };
+    await dbAdd(db, 'list_items', item);
+    await recordSyncChanges(db, [syncRecordForListItem(item, list)]);
   } catch (error) {
     // Already in the list — matches the server's INSERT OR IGNORE semantics.
   }
@@ -511,9 +521,13 @@ route('POST', '/api/lists/:listId/items', async ({ listId }, searchParams, getBo
 
 route('DELETE', '/api/lists/:listId/items/:tmdbId/:mediaType', async ({ listId, tmdbId, mediaType }) => {
   const db = await getDb();
+  const list = await findList(db, listId);
   const items = await dbGetAllByIndex(db, 'list_items', 'listId', Number(listId));
   const match = items.find(i => i.tmdbId === Number(tmdbId) && i.mediaType === mediaType);
-  if (match) await dbDelete(db, 'list_items', match.id);
+  if (match) {
+    await dbDelete(db, 'list_items', match.id);
+    if (list) await recordSyncChanges(db, [syncTombstone('list_item', listItemSyncKey(list.syncId, mediaType, Number(tmdbId)))]);
+  }
   return jsonResponse({});
 });
 
@@ -525,11 +539,13 @@ route('POST', '/api/watched/movies/:tmdbId', async ({ tmdbId }, searchParams, ge
   // is optional (older rows and restored backups may lack these fields); summaryFromRowOrFetch
   // below fills it in lazily for rows that arrive without it.
   const body = (await getBody()) || {};
-  await dbPut(db, 'watched_movies', {
+  const row = {
     tmdbId: Number(tmdbId),
     watchedAt: new Date().toISOString(),
     ...pickSummaryFields(body),
-  });
+  };
+  await dbPut(db, 'watched_movies', row);
+  await recordSyncChanges(db, [syncRecordForMovie(row)]);
   await removeFromWatchlist(db, tmdbId, 'movie');
   return jsonResponse({});
 });
@@ -537,6 +553,7 @@ route('POST', '/api/watched/movies/:tmdbId', async ({ tmdbId }, searchParams, ge
 route('DELETE', '/api/watched/movies/:tmdbId', async ({ tmdbId }) => {
   const db = await getDb();
   await dbDelete(db, 'watched_movies', Number(tmdbId));
+  await recordSyncChanges(db, [syncTombstone('watched_movie', Number(tmdbId))]);
   return jsonResponse({});
 });
 
@@ -665,20 +682,24 @@ route('POST', '/api/watched/shows/:tmdbId/season/:seasonNumber/episode/:episodeN
   const showId = Number(tmdbId);
   const season = Number(seasonNumber);
   const episode = Number(episodeNumber);
-  await dbPut(db, 'watched_episodes', {
+  const row = {
     key: `${showId}:${season}:${episode}`,
     showId,
     seasonNumber: season,
     episodeNumber: episode,
     watchedAt: new Date().toISOString(),
-  });
+  };
+  await dbPut(db, 'watched_episodes', row);
+  await recordSyncChanges(db, [syncRecordForEpisode(row)]);
   await removeFromWatchlist(db, showId, 'tv');
   return jsonResponse({});
 });
 
 route('DELETE', '/api/watched/shows/:tmdbId/season/:seasonNumber/episode/:episodeNumber', async ({ tmdbId, seasonNumber, episodeNumber }) => {
   const db = await getDb();
-  await dbDelete(db, 'watched_episodes', `${Number(tmdbId)}:${Number(seasonNumber)}:${Number(episodeNumber)}`);
+  const key = `${Number(tmdbId)}:${Number(seasonNumber)}:${Number(episodeNumber)}`;
+  await dbDelete(db, 'watched_episodes', key);
+  await recordSyncChanges(db, [syncTombstone('watched_episode', key)]);
   return jsonResponse({});
 });
 
@@ -825,13 +846,15 @@ route('POST', '/api/favorites/:mediaType/:tmdbId', async ({ mediaType, tmdbId },
   // See the matching comment on the watched-movies POST route above - same denormalize-at-write
   // pattern, so Favorite Movies/Favorite Shows can render from IndexedDB with no TMDB call.
   const body = (await getBody()) || {};
-  await dbPut(db, 'favorites', {
+  const row = {
     key: mediaKey(mediaType, tmdbId),
     mediaType,
     tmdbId: Number(tmdbId),
     favoritedAt: new Date().toISOString(),
     ...pickSummaryFields(body),
-  });
+  };
+  await dbPut(db, 'favorites', row);
+  await recordSyncChanges(db, [syncRecordForFavorite(row)]);
   return jsonResponse({});
 });
 
@@ -839,6 +862,7 @@ route('DELETE', '/api/favorites/:mediaType/:tmdbId', async ({ mediaType, tmdbId 
   if (invalidMediaType(mediaType)) return jsonResponse({ error: 'mediaType must be movie or tv' }, 400);
   const db = await getDb();
   await dbDelete(db, 'favorites', mediaKey(mediaType, tmdbId));
+  await recordSyncChanges(db, [syncTombstone('favorite', mediaKey(mediaType, tmdbId))]);
   return jsonResponse({});
 });
 
@@ -1143,16 +1167,29 @@ route('GET', '/api/recap', async (params, searchParams) => {
 // Settings > Reset all data: empties this profile's library (watched, lists and the Watchlist's
 // contents, favourites) but keeps the profile, its token and settings. The Watchlist
 // itself is recreated empty. The TMDB cache is left alone - it isn't the user's data.
+// On an online profile every record is deleted on the account too, so the library is empty on
+// every signed-in device (decided with the user); Settings syncs first, so that covers
+// everything the account has.
 const LIBRARY_STORES = ['lists', 'list_items', 'watched_movies', 'watched_episodes', 'favorites'];
 route('POST', '/api/reset', async () => {
   const db = await getDb();
+  const [lists, items, movies, episodes, favorites] = await Promise.all(LIBRARY_STORES.map(store => dbGetAll(db, store)));
+  const listById = new Map(lists.map(l => [l.id, l]));
+  const tombstones = [
+    ...items.filter(i => listById.has(i.listId)).map(i => syncTombstone('list_item', listItemSyncKey(listById.get(i.listId).syncId, i.mediaType, i.tmdbId))),
+    ...lists.filter(l => !l.isDefault).map(l => syncTombstone('list', l.syncId)),
+    ...movies.map(m => syncTombstone('watched_movie', m.tmdbId)),
+    ...episodes.map(e => syncTombstone('watched_episode', e.key)),
+    ...favorites.map(f => syncTombstone('favorite', f.key)),
+  ];
   await new Promise((resolve, reject) => {
     const tx = db.transaction(LIBRARY_STORES, 'readwrite');
     LIBRARY_STORES.forEach(store => tx.objectStore(store).clear());
-    tx.objectStore('lists').add({ name: 'Bookmarks', isDefault: true, createdAt: new Date(0).toISOString() });
+    tx.objectStore('lists').add(newWatchlistRow());
     tx.oncomplete = resolve;
     tx.onerror = () => reject(tx.error);
   });
+  await recordSyncChanges(db, tombstones);
   recommendationPoolCache.clear();
   return jsonResponse({ ok: true });
 });

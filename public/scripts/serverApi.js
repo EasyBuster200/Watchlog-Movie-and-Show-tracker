@@ -9,10 +9,11 @@
 //     accountKey,                 the key, only on a device that created or typed it
 //     keySavedAt,                 when the person confirmed saving the key (null = not yet)
 //     linkedAt }
-// The profile's library stays in its own IndexedDB database, exactly like an offline profile's.
-// Syncing it is roadmap Phase 4; until then an online profile works like an offline one.
+// The profile's library stays in its own IndexedDB database, exactly like an offline profile's;
+// sync.js keeps it the same on the account's other devices.
 //
-// Online accounts are hidden (onlineAccountsEnabled) until syncing exists, decided with the user.
+// Online accounts are hidden (onlineAccountsEnabled) until sign-up is invite-only, decided with
+// the user.
 // For trying them, set localStorage 'watchlog_preview_online_accounts' to '1'.
 //
 // Load after profiles.js.
@@ -139,13 +140,12 @@ function accountKeyConfirmMatches(key, typed) {
 
 // ---------- Linking profiles and accounts ----------
 
-// The profile on this device for an account: one linked to it, or a copy kept when signing out
-// of it (formerAccountId), so signing in again reattaches that copy instead of adding another.
+// The profile on this device linked to an account (signed in, or signed out by the server).
+// A copy kept at sign-out isn't one: it's an ordinary offline profile from then on, and signing
+// in again makes a new profile that starts from the account (decided with the user), so nothing
+// done in the copy reaches the account.
 function profileForAccount(accountId) {
-  const profiles = getProfiles();
-  return profiles.find(p => p.account && p.account.id === accountId)
-    || profiles.find(p => !p.account && p.formerAccountId === accountId)
-    || null;
+  return getProfiles().find(p => p.account && p.account.id === accountId) || null;
 }
 
 // Puts a sign-in response (create, key, or pairing code) on a profile.
@@ -161,15 +161,12 @@ function linkProfileToAccount(profileId, signIn, { accountKey = null, keySaved =
     keySavedAt: keySaved ? new Date().toISOString() : (sameAccount ? existing.keySavedAt || null : null),
     linkedAt: sameAccount && existing.linkedAt ? existing.linkedAt : new Date().toISOString(),
   };
-  return updateProfile(profileId, { account, formerAccountId: null });
+  return updateProfile(profileId, { account });
 }
 
-// Back to an offline profile: the library stays on the device, and it remembers the account so
-// signing in to it again reattaches this profile (profileForAccount).
+// Back to an offline profile: the library stays on the device as a separate copy.
 function unlinkProfileAccount(profileId) {
-  const profile = getProfiles().find(p => p.id === profileId);
-  const formerAccountId = profile && profile.account ? profile.account.id : (profile && profile.formerAccountId) || null;
-  return updateProfile(profileId, { account: null, formerAccountId });
+  return updateProfile(profileId, { account: null });
 }
 
 function markAccountKeySaved(profileId) {

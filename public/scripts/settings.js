@@ -5,7 +5,8 @@
 //   - Notifications: new episodes, release reminders, weekly recap (notifications.js)
 //   - Library: region and language (used for TMDB requests - localApi.js, profiles.js)
 //   - Data & backup: auto-backup on/off, back up now, export, import (autoBackup.js, backup.js)
-//   - Online account (serverApi.js, hidden until syncing exists): the account key, a new key,
+//   - Online account (serverApi.js, hidden until syncing exists): sync status and Sync now
+//     (sync.js), the account key, a new key,
 //     add a device (a one-time code), the device list, sign out, delete the account; or, for an
 //     offline profile, "Make this an online account"
 //   - Account: TMDB token, switch profile, delete profile, reset all data
@@ -23,6 +24,8 @@ function prefs() {
 function savePrefs(updates) {
   setProfilePrefs(user.id, updates);
   user = getActiveProfile();
+  // Theme, accent, region and language go to the account's other devices (sync.js).
+  recordPrefsChange(updates).catch(error => console.warn('Could not record the change for sync:', error));
 }
 
 // ---------- Profile card / token ----------
@@ -295,6 +298,7 @@ function formatBackupDate(iso) {
 }
 
 function autoBackupSub(current) {
+  if (user.account) return 'Not needed: your library is saved to your online account';
   if (!isNativeApp()) return 'Available in the Android app';
   if (!current.autoBackup) return 'Off';
   const info = getAutoBackupInfo(user.id);
@@ -519,7 +523,7 @@ function afterLeavingAccount(choice) {
 async function signOutThisDevice() {
   const choice = await keepOrRemoveDialog({
     title: 'Sign out of the online account?',
-    message: `Keep "${user.displayName}" here as an offline profile, with everything in it (it then needs your own TMDB token), or remove it, for example on a shared computer. You can sign in again any time with your account key.`,
+    message: `Keep "${user.displayName}" here as a separate offline profile, with everything in it (it then needs your own TMDB token), or remove it, for example on a shared computer. Signing in again later starts from what's on your account; a kept copy stays separate.`,
   });
   if (!choice) return;
   if ((await accountAction(() => signOutOnlineAccount(user).then(() => true), "Couldn't sign out")) === undefined) return;
@@ -543,6 +547,49 @@ async function deleteAccount() {
   afterLeavingAccount(choice);
 }
 
+// ---------- Sync (sync.js) ----------
+
+function syncTimeText(iso) {
+  const minutes = Math.floor((Date.now() - Date.parse(iso)) / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+function syncStatusText(status) {
+  if (status.syncing) return 'Syncing…';
+  if (status.status === 'error') return `Couldn't sync: ${status.lastError.message}`;
+  const waiting = status.pending ? `${status.pending} change${status.pending === 1 ? '' : 's'} waiting to sync` : null;
+  if (!status.lastSyncAt) return waiting || 'Not synced yet';
+  return waiting ? `${waiting} · last synced ${syncTimeText(status.lastSyncAt)}` : `Synced ${syncTimeText(status.lastSyncAt)}`;
+}
+
+// The Sync row, kept up to date when a sync runs on its own (sync.js's SYNC_EVENT).
+let currentSyncRow = null;
+window.addEventListener(SYNC_EVENT, () => { if (currentSyncRow && currentSyncRow.isConnected) showSyncStatus(currentSyncRow); });
+
+async function showSyncStatus(row) {
+  const sub = row.querySelector('.settings-row__sub');
+  if (!sub) return;
+  try {
+    sub.textContent = syncStatusText(await getSyncStatus());
+  } catch (error) {
+    sub.textContent = "Couldn't read the sync status";
+  }
+}
+
+async function syncFromSettings(row) {
+  if (row.classList.contains('is-busy')) return;
+  row.classList.add('is-busy');
+  const sub = row.querySelector('.settings-row__sub');
+  if (sub) sub.textContent = 'Syncing…';
+  await syncNow().catch(() => {});
+  row.classList.remove('is-busy');
+  await showSyncStatus(row);
+}
+
 // The "Online account" section: nothing while online accounts are hidden, unless this profile
 // already has one.
 function onlineAccountSection() {
@@ -564,7 +611,11 @@ function onlineAccountSection() {
       settingsRow({ label: 'Make it an offline profile', sub: 'Keep everything on this device, without the account', onClick: () => { unlinkProfileAccount(user.id); afterLeavingAccount('keep'); } }),
     ]);
   }
+  const syncRow = settingsRow({ label: 'Sync', sub: 'Checking…', value: 'Sync now', onClick: () => syncFromSettings(syncRow) });
+  currentSyncRow = syncRow;
+  showSyncStatus(syncRow);
   return settingsSection('Online account', [
+    syncRow,
     settingsRow({
       label: 'Account key',
       sub: account.keySavedAt ? 'Saved' : account.accountKey ? 'Not saved yet. Save it now.' : 'Not on this device',
@@ -596,14 +647,21 @@ async function deleteThisProfile() {
 }
 
 async function resetAllData() {
+  const online = Boolean(user.account);
   const ok = await confirmDialog({
     title: 'Reset all data?',
-    message: `This removes everything in "${user.displayName}"'s library from this phone: watched history, lists, Watchlist and favourites. The profile, its token and settings stay. This can't be undone.`,
+    message: online
+      ? `This removes everything in "${user.displayName}"'s library on every device signed in to this account: watched history, lists, Watchlist and favourites. The account, the profile and its settings stay. This can't be undone.`
+      : `This removes everything in "${user.displayName}"'s library from this phone: watched history, lists, Watchlist and favourites. The profile, its token and settings stay. This can't be undone.`,
     confirmLabel: 'Reset',
     danger: true,
   });
   if (!ok) return;
+  // Online: fetch what the account has first, so the reset deletes that too, and send the
+  // deletions straight away. If this device is offline they go on its next sync.
+  if (online) await syncNow().catch(() => {});
   await fetch('/api/reset', { method: 'POST', credentials: 'same-origin' });
+  if (online) await syncNow().catch(() => {});
   refreshEpisodeNotifications({ force: true }).catch(() => {});
   window.location.href = 'profile.html';
 }
@@ -629,20 +687,20 @@ function renderSections() {
     settingsRow({ label: 'Language', sub: 'Titles, overviews and episode names', value: languageName(current.language), onClick: chooseLanguage }),
   ]));
 
-  const backupNow = settingsRow({ label: 'Back up now', onClick: () => backUpNow(backupNow), disabled: !isNativeApp() });
+  const backupNow = user.account ? null : settingsRow({ label: 'Back up now', onClick: () => backUpNow(backupNow), disabled: !isNativeApp() });
   const exportRow = settingsRow({ label: 'Export data', sub: exportSub(), onClick: () => exportData(exportRow) });
   container.appendChild(settingsSection('Data & backup', [
     settingsRow({
       label: 'Auto-backup',
       sub: autoBackupSub(current),
-      switchOn: current.autoBackup,
-      disabled: !isNativeApp(),
+      switchOn: user.account ? false : current.autoBackup,
+      disabled: !isNativeApp() || Boolean(user.account),
       onSwitch: on => { savePrefs({ autoBackup: on }); renderSections(); },
     }),
     backupNow,
     exportRow,
     settingsRow({ label: 'Import data', sub: 'Restores a backup as a new profile', onClick: () => document.getElementById('import-app-input').click() }),
-  ]));
+  ].filter(Boolean)));
 
   const online = onlineAccountSection();
   if (online) container.appendChild(online);
@@ -652,7 +710,7 @@ function renderSections() {
       ? settingsRow({ label: 'TMDB token', sub: "Not needed: this online profile uses Watchlog's", value: user.tmdbApiKey ? 'Change' : 'Add', onClick: () => openProfileDialog({ focusToken: true }) })
       : settingsRow({ label: 'TMDB token', sub: 'The API Read Access Token this profile uses', value: 'Change', onClick: () => openProfileDialog({ focusToken: true }) }),
     settingsRow({ label: 'Switch profile', onClick: () => logout() }),
-    settingsRow({ label: 'Reset all data', sub: 'Empties this profile\'s library on this phone', danger: true, onClick: resetAllData }),
+    settingsRow({ label: 'Reset all data', sub: user.account ? 'Empties this library on every signed-in device' : 'Empties this profile\'s library on this phone', danger: true, onClick: resetAllData }),
     settingsRow({ label: 'Delete profile', sub: 'Removes the profile and all its data from this phone', danger: true, onClick: deleteThisProfile }),
   ]));
 

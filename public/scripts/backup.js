@@ -216,12 +216,17 @@ async function restoreBackup(payload, { displayName, tmdbApiKey }) {
   });
 
   const db = await openProfileDb(profile.id);
+  // The backup's own Watchlist replaces the new profile's empty one (they share a sync id).
+  if (payload.data.lists.some(l => l.isDefault)) {
+    for (const list of (await dbGetAll(db, 'lists')).filter(l => l.isDefault)) await dbDelete(db, 'lists', list.id);
+  }
   for (const storeName of BACKUP_STORE_NAMES) {
     for (const record of payload.data[storeName]) {
       await dbPut(db, storeName, record);
     }
   }
-  // Older backups can have watched titles on the Watchlist.
+  // Older backups can have watched titles on the Watchlist, and lists without a sync id.
+  await ensureListSyncIds(db);
   await pruneWatchedFromWatchlist(db);
   db.close();
 

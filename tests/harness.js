@@ -17,7 +17,7 @@ const { webcrypto: crypto } = require('node:crypto');
 
 const SCRIPTS_DIR = path.join(__dirname, '..', 'public', 'scripts');
 const PAGE_SCRIPTS = [
-  'standardItem.js', 'localDb.js', 'localApi.js', 'profiles.js', 'serverApi.js', 'backup.js', 'autoBackup.js', 'notifications.js',
+  'standardItem.js', 'localDb.js', 'localApi.js', 'profiles.js', 'serverApi.js', 'sync.js', 'backup.js', 'autoBackup.js', 'notifications.js',
 ];
 const TMDB_ORIGIN = 'https://api.themoviedb.org';
 
