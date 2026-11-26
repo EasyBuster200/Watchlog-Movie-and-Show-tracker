@@ -154,6 +154,8 @@ function linkProfileToAccount(profileId, signIn, { accountKey = null, keySaved =
     accountKey: accountKey ? formatAccountKey(accountKey) : (sameAccount ? existing.accountKey || null : null),
     keySavedAt: keySaved ? new Date().toISOString() : (sameAccount ? existing.keySavedAt || null : null),
     status: signIn.account.status || 'active',
+    email: signIn.account.email || (sameAccount ? existing.email || null : null),
+    recovery: sameAccount ? existing.recovery || null : null,
     isAdmin: sameAccount ? Boolean(existing.isAdmin) : false,
     pendingRequests: sameAccount ? existing.pendingRequests || 0 : 0,
     linkedAt: sameAccount && existing.linkedAt ? existing.linkedAt : new Date().toISOString(),
@@ -194,9 +196,16 @@ function getSignupMode() {
   return serverRequest('GET', '/v1/signup');
 }
 
-// `inviteCode` lets the person straight in; `note` tells the owner who's asking (approval mode).
-function createOnlineAccount(displayName, { inviteCode = null, note = null } = {}) {
-  const body = { displayName, deviceName: guessDeviceName() };
+// Sign-up step 1: a 6-digit code to the email (roadmap Phase 3c). If the address already has an
+// account, the inbox gets a note saying so instead; the answer is the same either way.
+function requestSignupCode(email) {
+  return serverRequest('POST', '/v1/email-codes', { body: { email } });
+}
+
+// Step 2: the account, with the code from the email. `inviteCode` lets the person straight in;
+// `note` tells the owner who's asking (approval mode).
+function createOnlineAccount(displayName, { email, emailCode, inviteCode = null, note = null } = {}) {
+  const body = { displayName, deviceName: guessDeviceName(), email, emailCode };
   if (inviteCode) body.inviteCode = inviteCode;
   if (note) body.note = note;
   return serverRequest('POST', '/v1/accounts', { body });
@@ -235,8 +244,82 @@ async function accountRequest(profile, method, path, body) {
 // Fetches the account (name, status, admin), e.g. to see whether a request was approved.
 async function refreshOnlineAccount(profile) {
   const data = await accountRequest(profile, 'GET', '/v1/account');
-  updateAccountFields(profile.id, { displayName: data.account.displayName, status: data.account.status || 'active', isAdmin: Boolean(data.isAdmin) });
+  updateAccountFields(profile.id, {
+    displayName: data.account.displayName, status: data.account.status || 'active', isAdmin: Boolean(data.isAdmin),
+    email: data.account.email || null, recovery: data.recovery || null,
+  });
   return data;
+}
+
+// ---------- The account's email (roadmap Phase 3c) ----------
+
+// Changing it: a code goes to the new address, then confirmEmailChange with it. The old address
+// is told.
+function requestEmailChangeCode(profile, email) {
+  return accountRequest(profile, 'POST', '/v1/account/email-code', { email });
+}
+
+async function confirmEmailChange(profile, email, code) {
+  const data = await accountRequest(profile, 'PUT', '/v1/account/email', { email, code });
+  updateAccountFields(profile.id, { email: data.account.email });
+  return data;
+}
+
+// ---------- Recovering an account with its email ----------
+// "Lost your key?": a code to the email, then a 24-hour hold (any signed-in device can cancel),
+// then this device finishes it and gets a new key. The waiting recoveries are kept on this
+// device (localStorage RECOVERIES_KEY: [{ token, email, displayName, completesAt }]) so the
+// person can close the app and come back.
+
+const RECOVERIES_KEY = 'watchlog_recoveries';
+
+function pendingRecoveries() {
+  try {
+    const list = JSON.parse(localStorage.getItem(RECOVERIES_KEY));
+    return Array.isArray(list) ? list : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function saveRecoveries(list) {
+  if (list.length) localStorage.setItem(RECOVERIES_KEY, JSON.stringify(list));
+  else localStorage.removeItem(RECOVERIES_KEY);
+}
+
+function forgetRecovery(token) {
+  saveRecoveries(pendingRecoveries().filter(r => r.token !== token));
+}
+
+function requestRecoveryCode(email) {
+  return serverRequest('POST', '/v1/recovery/code', { body: { email } });
+}
+
+async function startRecovery(email, code) {
+  const data = await serverRequest('POST', '/v1/recovery', { body: { email, code, deviceName: guessDeviceName() } });
+  const entry = { token: data.recoveryToken, email: String(email).trim().toLowerCase(), displayName: data.displayName, completesAt: data.completesAt };
+  // A newer recovery of the same account replaces the earlier one on the server too.
+  saveRecoveries([...pendingRecoveries().filter(r => r.email !== entry.email), entry]);
+  return entry;
+}
+
+// Resolves the sign-in (with the new accountKey) once the hold is over. Throws recovery_waiting
+// before then; a cancelled or replaced recovery (recovery_cancelled) is forgotten here.
+async function completeRecovery(entry) {
+  try {
+    const signIn = await serverRequest('POST', '/v1/recovery/complete', { body: { recoveryToken: entry.token, deviceName: guessDeviceName() } });
+    forgetRecovery(entry.token);
+    return signIn;
+  } catch (error) {
+    if (error.code === 'recovery_cancelled') forgetRecovery(entry.token);
+    throw error;
+  }
+}
+
+// A signed-in device stops someone else's recovery of its account.
+async function cancelAccountRecovery(profile) {
+  await accountRequest(profile, 'DELETE', '/v1/account/recovery');
+  updateAccountFields(profile.id, { recovery: null });
 }
 
 // A new key: the old one stops working. The new key is kept on this device until it's saved.

@@ -241,10 +241,16 @@ Online accounts (roadmap Phase 3) sign in with an **account key**, not a passwor
 | Request | Signed in | Does |
 |---|---|---|
 | `GET /v1/signup` | no | `{ mode, firstAccount }`: what the sign-up screen asks for (below) |
-| `POST /v1/accounts` `{ displayName, deviceName, inviteCode?, note? }` | no | Creates an account (or a request to join); returns `{ account, session, token, accountKey }` (the only time the key is sent). `account.status` is `active` or `pending` |
+| `POST /v1/email-codes` `{ email }` | no | Sign-up step 1: emails a 6-digit code (an address that already has an account gets a note instead; same answer) |
+| `POST /v1/accounts` `{ displayName, deviceName, email, emailCode, inviteCode?, note? }` | no | Creates an account (or a request to join); returns `{ account, session, token, accountKey }` (the only time the key is sent). `account.status` is `active` or `pending`, `account.email` the verified address |
 | `POST /v1/sessions` `{ accountKey, deviceName }` | no | Signs a device in with the key |
 | `POST /v1/sessions/pair` `{ code, deviceName }` | no | Signs a device in with a pairing code |
-| `GET /v1/account` | yes, pending too | `{ account, session, isAdmin }`; how a waiting device sees it was approved |
+| `GET /v1/account` | yes, pending too | `{ account, session, isAdmin, recovery }`; how a waiting device sees it was approved |
+| `POST /v1/account/email-code` `{ email }`, `PUT /v1/account/email` `{ email, code }` | yes, pending too | Changes the email: a code to the new address, then the change (the old address is told) |
+| `POST /v1/recovery/code` `{ email }` | no | "Lost your key?": a code to the address, if it has an account (same answer either way) |
+| `POST /v1/recovery` `{ email, code, deviceName }` | no | Starts a recovery: `{ recoveryToken, completesAt, displayName }`, 24 hours later |
+| `POST /v1/recovery/complete` `{ recoveryToken, deviceName }` | no | After the hold: a new key, every other device signed out; returns a sign-in with `accountKey`. `409 recovery_waiting` before, `404 recovery_cancelled` if cancelled or replaced |
+| `DELETE /v1/account/recovery` | yes, pending too | A signed-in device cancels a recovery ("Not you?") |
 | `PATCH /v1/account` `{ displayName }` | yes | Renames the account |
 | `DELETE /v1/account` | yes, pending too | Deletes the account and all its sessions and codes (withdraws a request) |
 | `POST /v1/account/key` | yes | Makes a new key (the old one stops working; devices stay signed in) |
@@ -259,7 +265,8 @@ Online accounts (roadmap Phase 3) sign in with an **account key**, not a passwor
 | `/v1/admin/...` | the admin | The admin page's API ("Admin and sign-ups" below) |
 
 Errors a client should expect: `400` (`name_required`, `invalid_key_format`,
-`invalid_code_format`, `invalid_json`, `wrong_invite`), `401` (`signed_out`, `wrong_key`,
+`invalid_code_format`, `invalid_json`, `wrong_invite`, `invalid_email`, `wrong_email_code`),
+`409 email_taken`, `503` (`email_unavailable`, `email_busy` once the day's emails are used up), `401` (`signed_out`, `wrong_key`,
 `wrong_code`), `403` (`account_pending` for a request still waiting, `account_suspended`,
 `signup_closed`, `invite_required`), `404`, and `429 too_many_requests` with a `Retry-After`
 header. Creating accounts is limited per address (5 an hour) and overall (100 a day), whatever
@@ -268,6 +275,44 @@ is limited per address (10 per 15 minutes), and making keys and codes per accoun
 (`LIMITS` in `routes/accounts.js`). Rate-limit counters store a hash of the address, never the
 address. The weekly job (`cleanup.js`) deletes expired sessions and codes and old counters
 before the backup.
+
+#### Email and account recovery
+
+Every online account has a **verified email** (roadmap Phase 3c), used only to get back in
+without the key and for notices about the account. `server/src/email.js` sends through
+**Resend** (decided with the user: Cloudflare's own sending is free only to addresses verified in
+the Cloudflare account): plain-text emails, 6-digit codes (hashed in `email_codes`, 15 minutes,
+5 tries), at most 90 a day (`EMAIL_LIMITS`, under Resend's free 100). The address is stored with
+a hash for looking it up (`accounts.email_hash`, unique).
+
+- **Sign-up:** the picker asks for the email with the name, `POST /v1/email-codes` sends a code,
+  and `POST /v1/accounts` needs it.
+- **Recovery** (`routes/recovery.js`): "Lost your key?" sends a code; entering it starts a
+  **24-hour hold** (`recoveries` table, decided with the user). Meanwhile the address gets an
+  email, the account's devices get a push and a "Someone is recovering your account · Not you?
+  Cancel" banner (each sync reply and `GET /v1/account` carry `recovery`), and Settings shows a
+  Cancel row. After it, the device that asked (it keeps the token in localStorage
+  `watchlog_recoveries`; the picker lists it) gets a new key, and every other session and
+  pairing code is deleted.
+- **The owner's alert:** each request to join is emailed to the admins' own account emails, with
+  the person's name, email and note and a link to the admin page (on top of the push).
+- Migration `0006_recovery_email.sql` **deleted every account made before it**, the owner's
+  included (decided with the user: they were all tests).
+
+**Setup (once):**
+
+1. Make a free account at resend.com. **Domains → Add domain**: `watchlogtracker.com`. Resend
+   lists DNS records (DKIM, SPF, MX for bounces); add them in Cloudflare (domain → DNS), or use
+   Resend's Cloudflare button. Wait until Resend shows the domain as verified.
+2. **API Keys → Create**: permission **Sending access**, domain `watchlogtracker.com`.
+3. In Cloudflare: Workers & Pages → watchlog → Settings → Variables and Secrets, **Production**
+   tab, type **Secret**: `RESEND_API_KEY` = that key. Optionally a `EMAIL_FROM` var (default
+   `Watchlog <no-reply@watchlogtracker.com>`). Previews have no key, so sign-up there answers
+   "Emails can't be sent right now" unless the key is added on the Previews tab too.
+4. Make your own account on the live site (the first account gets in whatever the sign-up mode),
+   then put its id in `ADMIN_ACCOUNT_IDS` again: the old one was deleted.
+
+Locally, `EMAIL_DEV_LOG=on` in `.dev.vars` logs every email (codes included) instead of sending.
 
 #### Admin and sign-ups
 

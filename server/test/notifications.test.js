@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import worker from '../src/index.js';
 import { generateVapidKeys, base64UrlEncode } from '../src/webpush.js';
 import { runNotifications, localClock, NOTIFY_LIMITS, regionalRelease } from '../src/notifications.js';
-import { createEnv, createCtx, ORIGIN } from './helpers.js';
+import { createEnv, createCtx, ORIGIN, signupEmail } from './helpers.js';
 
 async function api(env, method, path, { body, token, ip = '203.0.113.7' } = {}) {
   const headers = { 'CF-Connecting-IP': ip };
@@ -30,7 +30,7 @@ async function setup() {
 }
 
 async function person(env, name) {
-  const made = await api(env, 'POST', '/v1/accounts', { body: { displayName: name, deviceName: 'Phone' }, ip: `203.0.113.${ipCount++}` });
+  const made = await api(env, 'POST', '/v1/accounts', { body: { displayName: name, deviceName: 'Phone', ...(await signupEmail(env)) }, ip: `203.0.113.${ipCount++}` });
   return { id: made.body.account.id, token: made.body.token };
 }
 

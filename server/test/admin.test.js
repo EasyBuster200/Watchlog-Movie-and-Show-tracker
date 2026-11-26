@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../src/index.js';
 import { generateVapidKeys, base64UrlEncode } from '../src/webpush.js';
-import { createEnv, createCtx, ORIGIN } from './helpers.js';
+import { createEnv, createCtx, ORIGIN, signupEmail } from './helpers.js';
 
 // One "device": an IP address and, once signed in, its session token. Background work the
 // request started (ctx.waitUntil: push notifications) is finished before returning.
@@ -21,7 +21,7 @@ let ipCount = 10;
 const nextIp = () => `203.0.113.${ipCount++ % 250}`;
 
 async function signUp(env, displayName, extra = {}) {
-  return api(env, 'POST', '/v1/accounts', { body: { displayName, deviceName: 'Phone', ...extra }, ip: nextIp() });
+  return api(env, 'POST', '/v1/accounts', { body: { displayName, deviceName: 'Phone', ...(await signupEmail(env)), ...extra }, ip: nextIp() });
 }
 
 // The owner's account (the first one, so it gets in whatever the mode) and an env that knows it

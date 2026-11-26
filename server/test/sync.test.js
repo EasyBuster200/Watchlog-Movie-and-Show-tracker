@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../src/index.js';
 import { MAX_CHANGES_IN, MAX_CHANGES_OUT } from '../src/routes/sync.js';
-import { createEnv, createCtx, ORIGIN } from './helpers.js';
+import { createEnv, createCtx, ORIGIN, signupEmail } from './helpers.js';
 
 async function api(env, method, path, { token, body, ip = '203.0.113.1' } = {}) {
   const headers = { 'CF-Connecting-IP': ip };
@@ -15,7 +15,7 @@ async function api(env, method, path, { token, body, ip = '203.0.113.1' } = {}) 
 
 // One account, two devices (two sessions).
 async function twoDevices(env) {
-  const created = (await api(env, 'POST', '/v1/accounts', { body: { displayName: 'Ana', deviceName: 'Laptop' } })).body;
+  const created = (await api(env, 'POST', '/v1/accounts', { body: { displayName: 'Ana', deviceName: 'Laptop', ...(await signupEmail(env)) } })).body;
   const phone = (await api(env, 'POST', '/v1/sessions', { body: { accountKey: created.accountKey, deviceName: 'Phone' } })).body;
   return { laptop: created.token, phone: phone.token, accountId: created.account.id };
 }
@@ -89,7 +89,7 @@ test("a device whose clock runs ahead can't win forever", async () => {
 test('accounts never see each other\'s records, and deleting an account deletes its records', async () => {
   const env = createEnv();
   const a = await twoDevices(env);
-  const b = (await api(env, 'POST', '/v1/accounts', { body: { displayName: 'Rui' }, ip: '203.0.113.9' })).body;
+  const b = (await api(env, 'POST', '/v1/accounts', { body: { displayName: 'Rui', ...(await signupEmail(env)) }, ip: '203.0.113.9' })).body;
   await sync(env, a.laptop, 0, [movie(550, 1)]);
   assert.deepEqual((await sync(env, b.token, 0, [])).body.changes, []);
 

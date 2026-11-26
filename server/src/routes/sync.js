@@ -99,6 +99,9 @@ route('POST', '/sync', async ({ request, env }) => {
   const page = more ? results.slice(0, MAX_CHANGES_OUT) : results;
   const cursor = page.length ? page[page.length - 1].seq : since;
   const reply = { cursor, changes: page.map(changeJson), more, accepted: changes.length, serverTime: new Date().toISOString() };
+  // A recovery waiting out its hold: every signed-in device shows "Not you? Cancel" (recovery.js).
+  const recovery = await env.DB.prepare('SELECT completes_at AS completesAt FROM recoveries WHERE account_id = ?').bind(account.id).first();
+  if (recovery) reply.recovery = { completesAt: recovery.completesAt };
   if (isAdmin(env, account.id)) {
     const pending = await env.DB.prepare("SELECT COUNT(*) AS n FROM accounts WHERE status = 'pending'").first();
     reply.admin = { pendingRequests: pending ? pending.n : 0 };
