@@ -1,20 +1,28 @@
-// Online accounts: create one, sign a device in (account key or pairing code), see and change
-// the account, make a new key, add a device, list and sign out devices, delete the account.
-// See docs/DEVELOPMENT.md ("Accounts API") for the request and response shapes.
+// Online accounts: create one (or ask to join), sign a device in (account key or pairing code),
+// see and change the account, make a new key, add a device, list and sign out devices, delete
+// the account. See docs/DEVELOPMENT.md ("Accounts API") for the request and response shapes.
+//
+// Who may create an account depends on the admin page's sign-up mode (settings.js). In
+// 'approval' mode an account without an invite code starts 'pending': it gets its key and a
+// session like any account, but can only check on itself until the owner approves it, and the
+// owner's devices get a push notification (push.js).
 
 import { route, json, noContent, readJson, ApiError } from '../router.js';
 import {
   generateAccountKey, accountKeyData, hashAccountKey,
-  generatePairingCode, pairingCodeData, hashPairingCode, PAIRING_CODE_MINUTES,
+  generatePairingCode, pairingCodeData, hashPairingCode, hashInviteCode, PAIRING_CODE_MINUTES,
   createSession, requireAuth, rateLimit, clientKey, cleanName, nowIso,
 } from '../auth.js';
+import { getSettings } from '../settings.js';
+import { isAdmin } from '../admin.js';
+import { notifyAdmins } from '../push.js';
 
 const NAME_MAX = 40;
 const DEVICE_MAX = 60;
+const NOTE_MAX = 200;
 const HOUR = 3600;
 
-// Sign-up is open for now (decided with the user, until the admin page has invites), so account
-// creation is limited per address and overall.
+// Account creation is limited per address and overall, whatever the sign-up mode.
 export const LIMITS = {
   createAccountPerClient: [5, HOUR],
   createAccountTotal: [100, 24 * HOUR],
@@ -27,7 +35,7 @@ export const LIMITS = {
 const limited = (env, key, [limit, seconds]) => rateLimit(env, key, limit, seconds);
 
 function accountJson(row) {
-  return { id: row.id, displayName: row.displayName, createdAt: row.createdAt, keyChangedAt: row.keyChangedAt };
+  return { id: row.id, displayName: row.displayName, createdAt: row.createdAt, keyChangedAt: row.keyChangedAt, status: row.status || 'active' };
 }
 
 function sessionJson(session, currentId) {
@@ -51,13 +59,40 @@ async function signedInResponse(env, account, deviceName, extra = {}) {
 
 async function accountByKey(env, data) {
   const row = await env.DB.prepare(
-    "SELECT id, display_name AS displayName, created_at AS createdAt, key_changed_at AS keyChangedAt FROM accounts WHERE key_hash = ? AND status = 'active'"
+    'SELECT id, display_name AS displayName, created_at AS createdAt, key_changed_at AS keyChangedAt, status FROM accounts WHERE key_hash = ?'
   ).bind(await hashAccountKey(data)).first();
   return row || null;
 }
 
-// Create an account. Returns its account key, the only time the server ever sends it.
-route('POST', '/accounts', async ({ request, env }) => {
+const SUSPENDED = () => new ApiError(403, 'account_suspended', 'This account is suspended. Ask the owner of this Watchlog.');
+
+async function isFirstAccount(env) {
+  return !(await env.DB.prepare('SELECT 1 FROM accounts LIMIT 1').first());
+}
+
+// The sign-up mode that applies right now: the very first account always gets in.
+async function signupMode(env) {
+  if (await isFirstAccount(env)) return { mode: 'open', firstAccount: true };
+  return { mode: (await getSettings(env)).signupMode, firstAccount: false };
+}
+
+// The invite row for a code, if it can still be used.
+async function usableInvite(env, code, now) {
+  const data = pairingCodeData(code);
+  if (!data) return null;
+  const row = await env.DB.prepare('SELECT id FROM invites WHERE code_hash = ? AND used_at IS NULL AND expires_at > ?')
+    .bind(await hashInviteCode(data), now).first();
+  return row || null;
+}
+
+// What the sign-up screen should ask for.
+route('GET', '/signup', async ({ env }) => {
+  return json(await signupMode(env));
+});
+
+// Create an account (or, in 'approval' mode without an invite, ask to join). Returns its account
+// key, the only time the server ever sends it.
+route('POST', '/accounts', async ({ request, env, ctx }) => {
   const body = await readJson(request);
   const displayName = cleanName(body.displayName, { max: NAME_MAX });
   if (!displayName) throw new ApiError(400, 'name_required', 'Enter a name for the account.');
@@ -65,11 +100,42 @@ route('POST', '/accounts', async ({ request, env }) => {
   await limited(env, `create-account:client:${client}`, LIMITS.createAccountPerClient);
   await limited(env, 'create-account:all', LIMITS.createAccountTotal);
 
-  const accountKey = generateAccountKey();
   const now = nowIso();
-  const account = { id: crypto.randomUUID(), displayName, createdAt: now, keyChangedAt: now };
-  await env.DB.prepare('INSERT INTO accounts (id, key_hash, display_name, created_at, key_changed_at) VALUES (?, ?, ?, ?, ?)')
-    .bind(account.id, await hashAccountKey(accountKeyData(accountKey)), displayName, now, now).run();
+  const { mode } = await signupMode(env);
+  const inviteCode = typeof body.inviteCode === 'string' && body.inviteCode.trim() ? body.inviteCode : null;
+  let invite = null;
+  if (mode === 'closed') throw new ApiError(403, 'signup_closed', "Sign-ups are closed right now. Ask the owner of this Watchlog.");
+  if (inviteCode && mode !== 'open') {
+    invite = await usableInvite(env, inviteCode, now);
+    if (!invite) throw new ApiError(400, 'wrong_invite', 'That invite code is wrong, used or expired. Ask for a new one.');
+  }
+  if (mode === 'invite' && !invite) throw new ApiError(403, 'invite_required', 'You need an invite code to make an account.');
+  const status = mode === 'approval' && !invite ? 'pending' : 'active';
+  const requestNote = status === 'pending' ? cleanName(body.note, { max: NOTE_MAX }) : null;
+
+  const accountKey = generateAccountKey();
+  const account = { id: crypto.randomUUID(), displayName, createdAt: now, keyChangedAt: now, status };
+  await env.DB.prepare('INSERT INTO accounts (id, key_hash, display_name, status, request_note, created_at, key_changed_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .bind(account.id, await hashAccountKey(accountKeyData(accountKey)), displayName, status, requestNote, now, now).run();
+
+  if (invite) {
+    // Claim the invite only if it's still unused: two sign-ups racing for one code can't both win.
+    const claimed = await env.DB.prepare('UPDATE invites SET used_at = ?, used_by = ? WHERE id = ? AND used_at IS NULL')
+      .bind(now, account.id, invite.id).run();
+    if (!claimed.meta || !claimed.meta.changes) {
+      await env.DB.prepare('DELETE FROM accounts WHERE id = ?').bind(account.id).run();
+      throw new ApiError(400, 'wrong_invite', 'That invite code was just used. Ask for a new one.');
+    }
+  }
+  if (status === 'pending') {
+    const notify = notifyAdmins(env, {
+      title: 'Someone wants to join Watchlog',
+      body: requestNote ? `${displayName}: "${requestNote}"` : displayName,
+      url: '/admin.html#requests',
+      tag: 'signup-requests',
+    }).catch(error => console.error('Push to the owner failed', error && error.stack ? error.stack : error));
+    if (ctx && ctx.waitUntil) ctx.waitUntil(notify); else await notify;
+  }
   return signedInResponse(env, account, deviceNameFrom(body), { accountKey });
 });
 
@@ -81,6 +147,7 @@ route('POST', '/sessions', async ({ request, env }) => {
   if (!data) throw new ApiError(400, 'invalid_key_format', "That doesn't look like an account key. Check it for typos.");
   const account = await accountByKey(env, data);
   if (!account) throw new ApiError(401, 'wrong_key', 'No account has that key.');
+  if (account.status === 'suspended') throw SUSPENDED();
   return signedInResponse(env, account, deviceNameFrom(body));
 });
 
@@ -97,15 +164,16 @@ route('POST', '/sessions/pair', async ({ request, env }) => {
     throw new ApiError(401, 'wrong_code', 'That code is wrong or has expired. Make a new one on your other device.');
   }
   const account = await env.DB.prepare(
-    "SELECT id, display_name AS displayName, created_at AS createdAt, key_changed_at AS keyChangedAt FROM accounts WHERE id = ? AND status = 'active'"
+    "SELECT id, display_name AS displayName, created_at AS createdAt, key_changed_at AS keyChangedAt, status FROM accounts WHERE id = ? AND status = 'active'"
   ).bind(claimed.account_id).first();
   if (!account) throw new ApiError(401, 'wrong_code', 'That code is wrong or has expired. Make a new one on your other device.');
   return signedInResponse(env, account, deviceNameFrom(body));
 });
 
+// Also how a device waiting for approval checks on itself (account.status).
 route('GET', '/account', async ({ request, env }) => {
-  const { account, session } = await requireAuth(request, env);
-  return json({ account: accountJson(account), session: sessionJson(session, session.id) });
+  const { account, session } = await requireAuth(request, env, { allowPending: true });
+  return json({ account: accountJson(account), session: sessionJson(session, session.id), isAdmin: isAdmin(env, account.id) });
 });
 
 route('PATCH', '/account', async ({ request, env }) => {
@@ -117,9 +185,10 @@ route('PATCH', '/account', async ({ request, env }) => {
   return json({ account: accountJson({ ...account, displayName }) });
 });
 
-// Deletes the account and everything the server holds for it (sessions, codes).
+// Deletes the account and everything the server holds for it (sessions, codes). Someone waiting
+// for approval can withdraw their request this way too.
 route('DELETE', '/account', async ({ request, env }) => {
-  const { account } = await requireAuth(request, env);
+  const { account } = await requireAuth(request, env, { allowPending: true });
   await env.DB.prepare('DELETE FROM accounts WHERE id = ?').bind(account.id).run();
   return noContent();
 });
@@ -162,7 +231,7 @@ route('GET', '/sessions', async ({ request, env }) => {
 
 // Sign out this device.
 route('DELETE', '/session', async ({ request, env }) => {
-  const { session } = await requireAuth(request, env);
+  const { session } = await requireAuth(request, env, { allowPending: true });
   await env.DB.prepare('DELETE FROM sessions WHERE id = ?').bind(session.id).run();
   return noContent();
 });

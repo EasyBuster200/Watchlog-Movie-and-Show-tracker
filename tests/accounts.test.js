@@ -30,11 +30,45 @@ function fakeServer(routes) {
 
 const activeAccount = app => JSON.parse(JSON.stringify(app.run('getActiveProfile().account')));
 
-test('online accounts stay hidden unless switched on for testing', () => {
-  const app = createApp();
-  assert.equal(app.run('onlineAccountsEnabled()'), false);
-  app.context.localStorage.setItem('watchlog_preview_online_accounts', '1');
-  assert.equal(app.run('onlineAccountsEnabled()'), true);
+test('asking to join sends the note and invite code; a pending account is marked as waiting', async () => {
+  const app = createApp({
+    server: fakeServer({
+      'GET /v1/signup': { body: { mode: 'approval', firstAccount: false } },
+      'POST /v1/accounts': req => signInReply({ accountKey: KEY, account: { id: 'acc-1', displayName: 'Rui', status: req.body.inviteCode ? 'active' : 'pending' } }),
+    }),
+  });
+  assert.deepEqual(await app.call('getSignupMode'), { mode: 'approval', firstAccount: false });
+  const created = await app.call('createOnlineAccount', 'Rui', { note: "Ana's brother" });
+  assert.deepEqual(app.serverRequests.at(-1).body, { displayName: 'Rui', deviceName: 'Unknown device', note: "Ana's brother" });
+  const id = app.run('getActiveProfileId()');
+  app.context.__created = created;
+  app.run(`linkProfileToAccount('${id}', __created)`);
+  assert.equal(app.run('isPendingAccount(getActiveProfile())'), true);
+
+  const withInvite = await app.call('createOnlineAccount', 'Mum', { inviteCode: 'ABCD-EFGH' });
+  assert.equal(app.serverRequests.at(-1).body.inviteCode, 'ABCD-EFGH');
+  assert.equal(withInvite.account.status, 'active');
+});
+
+test('checking the account picks up approval and the admin flag; a 403 "pending" marks the profile', async () => {
+  let status = 'pending';
+  const app = createApp({
+    server: fakeServer({
+      'GET /v1/account': () => ({ body: { account: { id: 'acc-1', displayName: 'Ana', status }, isAdmin: status === 'active' } }),
+      'POST /v1/pairing-codes': { status: 403, body: { error: 'account_pending', message: 'Waiting.' } },
+    }),
+  });
+  const id = app.run('getActiveProfileId()');
+  app.run(`linkProfileToAccount('${id}', ${JSON.stringify(signInReply().body)})`);
+  await app.run('refreshOnlineAccount(getActiveProfile())');
+  assert.equal(activeAccount(app).status, 'pending');
+  status = 'active';
+  await app.run('refreshOnlineAccount(getActiveProfile())');
+  assert.equal(activeAccount(app).status, 'active');
+  assert.equal(activeAccount(app).isAdmin, true);
+
+  await assert.rejects(app.run('createPairingCode(getActiveProfile())'), /Waiting/);
+  assert.equal(activeAccount(app).status, 'pending');
 });
 
 test('the web app uses its own address; the Android app the production server; an override wins', () => {

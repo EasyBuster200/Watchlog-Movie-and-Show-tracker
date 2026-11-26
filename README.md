@@ -2,15 +2,16 @@
 
 **A free, private movie and TV show tracker for Android and iPhone.** Keep track of every movie you've
 watched and every episode of every show, see what's airing next, and get a notification when a
-new episode comes out. No account, no ads, no subscription.
+new episode comes out. No account needed, no ads, no subscription.
 
 When TV Time shut down on 15 July 2026, I lost the app I used every day to keep track of my
 shows, so I built my own replacement. Watchlog started as a personal project (and a way to learn),
 and I'm sharing it in case it's useful to anyone else who misses TV Time. It's built around three
 ideas:
 
-- **Your data stays on your phone.** There's no sign-up, and no server that keeps your data. Your
-  watch history is stored only on your device, and nobody else ever sees it.
+- **Your data stays on your phone.** An offline profile needs no sign-up, and its watch history
+  is stored only on your device. If you'd like the same library on your phone and your laptop,
+  you can ask for an [online account](#an-online-account-optional) instead.
 - **Free forever.** There's nothing to host or pay for. Movie and show information comes from
   [TMDB](https://www.themoviedb.org/) (The Movie Database), using a free personal key that each
   person gets for themselves (it takes a few minutes, see [step 1](#1-get-your-free-tmdb-key)).
@@ -41,6 +42,7 @@ ideas:
   - [1. Get your free TMDB key](#1-get-your-free-tmdb-key)
   - [2. Install the app](#2-install-the-app)
   - [3. Create your profile](#3-create-your-profile)
+  - [An online account (optional)](#an-online-account-optional)
 - [How to use it](#how-to-use-it)
 - [Settings](#settings)
 - [Backups and moving to a new phone](#backups-and-moving-to-a-new-phone)
@@ -165,6 +167,23 @@ When it's done, Watchlog appears in your app list.
 4. Tap your new profile to start.
 5. In the Android app, the first time, Android asks whether Watchlog may send you notifications. Tap **Allow** if
    you want them (you can turn each kind on or off later in [Settings](#settings)).
+
+### An online account (optional)
+
+Instead of an offline profile, you can have an **online account**: your library is kept the same on
+every device you sign in on (phone, tablet, laptop), and you **don't need a TMDB key**.
+
+- On **Who's watching?**, tap **Create an account**. Enter your name and a short note so the owner
+  knows who you are (for example "Ana's brother"), then **Ask to join**. If the owner gave you an
+  **invite code**, enter it too and you're in straight away.
+- You get an **account key**: a long code that signs you in on any device. **Save it** somewhere
+  safe (a password manager, your files, or on paper). It's the only way to sign in again.
+- Without an invite, you see **Waiting for approval** until the owner lets you in. Tap **Check
+  again** any time.
+- To add another device: on a signed-in one, go to **Settings → Add a device** and enter the code
+  it shows on the new one (or sign in there with your key).
+- An existing offline profile can become an online account in **Settings → Make this an online
+  account**; everything in it is kept.
 
 ## How to use it
 
@@ -291,6 +310,9 @@ whichever profile is currently open.
 
 ## Backups and moving to a new phone
 
+**With an online account**, your library is saved to your account, so a new phone only needs you
+to sign in. The rest of this section is about offline profiles.
+
 **Your data only exists on your phone.** If you uninstall Watchlog (on iPhone: delete its icon)
 or lose your phone without a backup, it's gone, so it's worth knowing how backups work.
 
@@ -342,9 +364,13 @@ version you have at the bottom of Settings.
 
 ## Privacy
 
-- Watchlog has **no account and no server that stores your data**. Everything you track is stored
-  only on your phone. (The web app's address only delivers the app itself; your data never goes
-  there.)
+- **Offline profiles** have no account, and nothing they track leaves your phone. (The web app's
+  address only delivers the app itself.)
+- **Online accounts** keep your library on the Watchlog server (on Cloudflare) so it can sync
+  between your devices. The server knows your account's name, the note you sent when asking to
+  join, and your signed-in devices; your account key is stored only as a scrambled fingerprint.
+  The owner's admin page shows names and counts, not what you watch. Deleting your account
+  (**Settings → Delete online account**) deletes it all from the server.
 - The only thing it connects to is **TMDB**, to get movie and show information and pictures,
   using your own token. Your watch history is never sent anywhere.
 - There are **no ads, no analytics and no tracking** of any kind.

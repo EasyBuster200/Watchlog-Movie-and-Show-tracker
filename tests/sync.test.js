@@ -151,6 +151,39 @@ test("changes are stamped with the server's clock, so a device whose clock is be
   assert.deepEqual((await library(laptop)).movies, [], "the phone's later change wins");
 });
 
+test("the owner's sync replies say how many people are waiting to join", async () => {
+  const server = createSyncServer();
+  const original = server.handler;
+  let admin = { pendingRequests: 2 };
+  server.handler = (...args) => {
+    const reply = original(...args);
+    if (reply.body && admin) reply.body.admin = admin;
+    return reply;
+  };
+  const app = createApp({ server: (...args) => server.handler(...args) });
+  app.profileId = app.run('getActiveProfileId()');
+  signIn(app);
+  await sync(app);
+  let account = plain(app.run('getActiveProfile().account'));
+  assert.equal(account.isAdmin, true);
+  assert.equal(account.pendingRequests, 2);
+
+  admin = null; // no longer the admin
+  await sync(app);
+  account = plain(app.run('getActiveProfile().account'));
+  assert.equal(account.isAdmin, false);
+  assert.equal(account.pendingRequests, 0);
+});
+
+test("a record arriving without its own time gets the change's time, so lists still sort", async () => {
+  const server = createSyncServer();
+  const laptop = device(server);
+  server.handler('POST', '/v1/sync', { headers: { Authorization: 'Bearer tok' }, body: { since: 0, changes: [{ kind: 'watched_movie', key: '603', data: { tmdbId: 603, title: 'The Matrix' }, updatedAt: '2026-11-20T10:00:00.000Z' }] } });
+  await sync(laptop);
+  assert.equal(plain(await laptop.getAll('watched_movies'))[0].watchedAt, '2026-11-20T10:00:00.000Z');
+  assert.equal((await laptop.api('GET', '/api/watched/movies')).status, 200);
+});
+
 test('offline profiles record nothing and never talk to the server', async () => {
   const server = createSyncServer();
   const app = device(server, { online: false });

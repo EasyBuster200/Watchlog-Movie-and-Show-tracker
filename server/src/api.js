@@ -16,6 +16,8 @@ import './routes/health.js';
 import './routes/accounts.js';
 import './routes/tmdb.js';
 import './routes/sync.js';
+import './routes/push.js';
+import './routes/admin.js';
 
 export { API_PREFIX };
 

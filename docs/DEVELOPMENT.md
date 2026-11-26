@@ -226,12 +226,13 @@ Online accounts (roadmap Phase 3) sign in with an **account key**, not a passwor
 
 | Request | Signed in | Does |
 |---|---|---|
-| `POST /v1/accounts` `{ displayName, deviceName }` | no | Creates an account; returns `{ account, session, token, accountKey }` (the only time the key is sent) |
+| `GET /v1/signup` | no | `{ mode, firstAccount }`: what the sign-up screen asks for (below) |
+| `POST /v1/accounts` `{ displayName, deviceName, inviteCode?, note? }` | no | Creates an account (or a request to join); returns `{ account, session, token, accountKey }` (the only time the key is sent). `account.status` is `active` or `pending` |
 | `POST /v1/sessions` `{ accountKey, deviceName }` | no | Signs a device in with the key |
 | `POST /v1/sessions/pair` `{ code, deviceName }` | no | Signs a device in with a pairing code |
-| `GET /v1/account` | yes | `{ account, session }` |
+| `GET /v1/account` | yes, pending too | `{ account, session, isAdmin }`; how a waiting device sees it was approved |
 | `PATCH /v1/account` `{ displayName }` | yes | Renames the account |
-| `DELETE /v1/account` | yes | Deletes the account and all its sessions and codes |
+| `DELETE /v1/account` | yes, pending too | Deletes the account and all its sessions and codes (withdraws a request) |
 | `POST /v1/account/key` | yes | Makes a new key (the old one stops working; devices stay signed in) |
 | `POST /v1/pairing-codes` | yes | `{ code, expiresAt }` for adding a device |
 | `GET /v1/sessions` | yes | The account's devices, `current` marking this one |
@@ -239,15 +240,68 @@ Online accounts (roadmap Phase 3) sign in with an **account key**, not a passwor
 | `DELETE /v1/session` | yes | Signs this device out |
 | `GET /v1/tmdb/<TMDB path>` | yes | TMDB, asked with the owner's token (below) |
 | `POST /v1/sync` | yes | Sends this device's changes and returns everyone else's (below) |
+| `GET /v1/push/key`, `PUT`/`DELETE /v1/push/subscription` | yes (key: no) | Web Push for this device ("Admin and sign-ups" below) |
+| `/v1/admin/...` | the admin | The admin page's API ("Admin and sign-ups" below) |
 
 Errors a client should expect: `400` (`name_required`, `invalid_key_format`,
-`invalid_code_format`, `invalid_json`), `401` (`signed_out`, `wrong_key`, `wrong_code`), `404`,
-and `429 too_many_requests` with a `Retry-After` header. Sign-up is open for now, so creating
-accounts is limited per address (5 an hour) and overall (100 a day); signing in with a key or code
+`invalid_code_format`, `invalid_json`, `wrong_invite`), `401` (`signed_out`, `wrong_key`,
+`wrong_code`), `403` (`account_pending` for a request still waiting, `account_suspended`,
+`signup_closed`, `invite_required`), `404`, and `429 too_many_requests` with a `Retry-After`
+header. Creating accounts is limited per address (5 an hour) and overall (100 a day), whatever
+the sign-up mode; signing in with a key or code
 is limited per address (10 per 15 minutes), and making keys and codes per account
 (`LIMITS` in `routes/accounts.js`). Rate-limit counters store a hash of the address, never the
 address. The weekly job (`cleanup.js`) deletes expired sessions and codes and old counters
 before the backup.
+
+#### Admin and sign-ups
+
+The owner's **admin page** (`public/admin.html`, `admin.js`; roadmap Phase 8 part 1) runs on the
+`/v1/admin/...` API (`server/src/routes/admin.js`). Its own route list is at the top of that file.
+
+- **Who's the admin:** accounts whose id is in the `ADMIN_ACCOUNT_IDS` Worker secret
+  (comma-separated). There's no admin password: being signed in to that account on a device is
+  what opens the page there. The page shows a signed-in account its id if it isn't the admin,
+  for copying into the secret. If the owner's account started out waiting for approval, opening
+  the admin page activates it.
+- **Sign-up modes** (`server/src/settings.js`, changed on the admin page): `closed`,
+  `invite` (an invite code is required), `approval` (the default: anyone can ask, and waits as
+  `pending` until approved; an invite code skips the wait) and `open`. While there's no account
+  at all, the first sign-up gets in whatever the mode, so the owner can make theirs.
+- **Pending accounts** have a key and a session, but every route except `GET`/`DELETE
+  /v1/account` and `DELETE /v1/session` answers `403 account_pending`. The app shows them a
+  "Waiting for approval" screen. Declining deletes the account.
+- **Invites:** `XXXX-XXXX` codes (stored hashed), single use, 1 to 30 days, with a note only the
+  owner sees.
+- **Users:** approve, decline, sign out every device, suspend (signed out everywhere, can't sign
+  in), unsuspend, delete. Admin accounts can't be changed from the page. The page shows counts,
+  never anyone's library.
+- **TMDB proxy:** an on/off switch and the daily cap (settings `tmdb_proxy`, `tmdb_daily_cap`),
+  on top of the `TMDB_PROXY` var.
+- **Audit log:** every admin action, shown under Activity.
+- **The owner hears about requests:** each sync reply for the admin carries
+  `admin: { pendingRequests }`, which the app shows as a "N people want to join" banner on any
+  device. On top of that a Web Push notification goes to every device where the owner switched
+  notifications on (the admin page's "Notify me on this device"; iPhone needs the app added to
+  the Home Screen, iOS 16.4+; the Android app can't get Web Push).
+- **Web Push** (`server/src/push.js`, `webpush.js`, roadmap Phase 6's foundation): VAPID
+  (RFC 8292) and aes128gcm encryption (RFC 8291) with Web Crypto only; `push_subscriptions`
+  rows belong to a session, so signing out removes them, and subscriptions push services report
+  gone (404/410) are deleted. The service worker shows the notification and opens its `url`.
+
+**Setup (once, Cloudflare dashboard → Workers & Pages → watchlog → Settings → Variables and
+Secrets, Production tab, type Secret):**
+
+1. Create your own online account on the live site first (the first account gets in without
+   approval). Open `/admin.html`: it shows your account id. Add it as `ADMIN_ACCOUNT_IDS`.
+2. For push notifications: run `node tools/make-vapid-keys.mjs` and add the two keys it prints
+   as `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`. Keep them in a password manager: new keys
+   break every existing subscription. Optionally `VAPID_SUBJECT` (an `https://` or `mailto:`
+   contact address for push services; the repository's address by default).
+
+To try it on this machine: `npx wrangler d1 migrations apply DB --local`, put
+`ADMIN_ACCOUNT_IDS=...` (and VAPID keys) in a `.dev.vars` file (gitignored), and start the
+`watchlog-worker` launch configuration.
 
 #### Sync API
 
@@ -313,9 +367,10 @@ token to work offline, or remove it. A kept copy is a separate offline profile f
 signing in again makes a new profile that starts from what's on the account, and nothing done in
 the copy reaches it.
 
-**It's all hidden** until sign-up is invite-only (decided with the user). To try it, open the browser console on the app (a pull request's
-preview, so the preview database is used) and run
-`localStorage.setItem('watchlog_preview_online_accounts', '1')`, then reload. The web app calls the
+Online accounts are shown to everyone; who can make one is the admin page's sign-up mode (above).
+The create screen asks for what that mode needs (an invite code, or a note for the owner), and a
+request waits on a "Waiting for approval" screen (`profile-picker.html?screen=waiting`) that
+every page sends a waiting profile to (`auth.js`). The web app calls the
 server on its own address; the Android app calls production; setting
 `localStorage.watchlog_server_url` points either at another server (it must allow the page's
 origin, see CORS above).

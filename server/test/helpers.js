@@ -115,8 +115,11 @@ export function createAssets() {
   };
 }
 
-export function createEnv(overrides = {}) {
-  return {
+// `signupMode` sets the admin page's sign-up mode (server/src/settings.js). Tests default to
+// 'open', so tests about other things can make as many accounts as they like; the real default
+// is 'approval'. Pass signupMode: null to keep the real default.
+export function createEnv({ signupMode = 'open', ...overrides } = {}) {
+  const env = {
     ENVIRONMENT: 'test',
     ALLOWED_ORIGINS: 'https://localhost',
     DB: createD1(),
@@ -124,6 +127,10 @@ export function createEnv(overrides = {}) {
     ASSETS: createAssets(),
     ...overrides,
   };
+  if (signupMode && env.DB && env.DB.sqlite) {
+    env.DB.sqlite.prepare("INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('signup_mode', ?, '2026-01-01T00:00:00.000Z')").run(signupMode);
+  }
+  return env;
 }
 
 export const ORIGIN = 'https://watchlog.example.workers.dev';

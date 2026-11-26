@@ -12,7 +12,12 @@
 // hashed. A session expires SESSION_IDLE_DAYS after it was last used; using it pushes that out.
 //
 // PAIRING CODE: 8 Crockford characters ("XXXX-XXXX", 40 bits), single use, valid
-// PAIRING_CODE_MINUTES. Short enough to type; rate limits make guessing hopeless.
+// PAIRING_CODE_MINUTES. Short enough to type; rate limits make guessing hopeless. Invite codes
+// (the admin page) have the same shape, hashed under their own name.
+//
+// ACCOUNT STATUS: 'active'; 'pending' (asked to join, waiting for the owner's approval: it can
+// only check its own account, routes opt in with allowPending); 'suspended' (signed out
+// everywhere, and can't sign in).
 
 import { ApiError } from './router.js';
 
@@ -89,6 +94,7 @@ export async function sha256(text) {
 export const hashAccountKey = data => sha256(`account-key:${data}`);
 export const hashSessionToken = token => sha256(`session:${token}`);
 export const hashPairingCode = code => sha256(`pairing:${code}`);
+export const hashInviteCode = code => sha256(`invite:${code}`);
 
 export function nowIso(now = new Date()) {
   return now.toISOString();
@@ -122,9 +128,11 @@ function bearerToken(request) {
 }
 
 const SIGNED_OUT = () => new ApiError(401, 'signed_out', 'This device is signed out. Sign in again.');
+export const PENDING = () => new ApiError(403, 'account_pending', 'Your account is waiting for the owner to approve it.');
 
-// Returns { account, session } for the request's session token, or throws a 401.
-export async function requireAuth(request, env, now = new Date()) {
+// Returns { account, session } for the request's session token, or throws a 401 (or a 403 for
+// an account still waiting for approval, unless the route allows it).
+export async function requireAuth(request, env, { now = new Date(), allowPending = false } = {}) {
   const token = bearerToken(request);
   if (!token) throw SIGNED_OUT();
   const row = await env.DB.prepare(
@@ -133,7 +141,8 @@ export async function requireAuth(request, env, now = new Date()) {
        FROM sessions s JOIN accounts a ON a.id = s.account_id
       WHERE s.token_hash = ?`
   ).bind(await hashSessionToken(token)).first();
-  if (!row || row.status !== 'active') throw SIGNED_OUT();
+  if (!row || !['active', 'pending'].includes(row.status)) throw SIGNED_OUT();
+  if (row.status === 'pending' && !allowPending) throw PENDING();
   if (Date.parse(row.expires_at) <= now.getTime()) {
     await env.DB.prepare('DELETE FROM sessions WHERE id = ?').bind(row.session_id).run();
     throw SIGNED_OUT();
@@ -145,7 +154,7 @@ export async function requireAuth(request, env, now = new Date()) {
       .bind(lastUsedAt, sessionExpiry(now), row.session_id).run();
   }
   return {
-    account: { id: row.account_id, displayName: row.display_name, createdAt: row.account_created_at, keyChangedAt: row.key_changed_at },
+    account: { id: row.account_id, displayName: row.display_name, createdAt: row.account_created_at, keyChangedAt: row.key_changed_at, status: row.status },
     session: { id: row.session_id, deviceName: row.device_name, createdAt: row.session_created_at, lastUsedAt },
   };
 }
