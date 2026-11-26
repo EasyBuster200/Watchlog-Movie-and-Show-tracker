@@ -68,6 +68,12 @@ test('the Worker script, static files, backups bucket and weekly schedule are co
   assert.equal(config.previews.triggers, undefined, 'Cron Triggers do not belong in previews');
 });
 
+test('the backup exports the production database, and previews never name it', () => {
+  const production = config.d1_databases.find(d => d.binding === 'DB');
+  assert.equal(config.vars.BACKUP_DATABASE_ID, production.database_id);
+  assert.equal(config.previews.vars.BACKUP_DATABASE_ID, undefined);
+});
+
 test('deploys apply migrations to the right database before uploading', () => {
   const { scripts } = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   // Every build (previews and main) migrates the preview database; only main's deploy step

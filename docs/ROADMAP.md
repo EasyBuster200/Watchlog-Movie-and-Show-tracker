@@ -148,7 +148,7 @@ Sign-up is **open for now** (decided with the user): creating accounts is rate-l
 - **Theme, accent colour, region and language sync**; the notification and auto-backup switches stay per device.
 - Lists get a shared sync id (the Watchlist a fixed one); the app keeps using its device-local list numbers, so pages don't change.
 
-**Open problem before real data:** the weekly R2 backup (`server/src/backup.js`) dumps the whole database in one Cron run, and the free plan gives a Cron run 10 ms of CPU. With synced libraries in `sync_records` that will likely run out (D1 Time Travel still covers 7 days). Options: back up in pieces across several runs, or export with `wrangler d1 export` from a scheduled GitHub Action (no CPU limit) and upload that to R2.
+**Backups and the CPU limit (solved):** the weekly R2 backup used to build the dump inside the Worker, which would outgrow the free plan's 10 ms of CPU per Cron run once synced libraries fill `sync_records`. It now asks D1 to export the database and only streams the finished file into R2 (decided with the user, over a GitHub Action or a backup split across runs). It needs the `BACKUP_API_TOKEN` secret (`docs/DEVELOPMENT.md`, "Server database").
 
 ### Rules
 

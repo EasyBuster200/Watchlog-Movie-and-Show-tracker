@@ -30,7 +30,10 @@
     // Origins besides the site itself that may call the API: the Android app.
     "ALLOWED_ORIGINS": "https://localhost",
     // "off" pauses the TMDB proxy (server/src/routes/tmdb.js). Its token is the TMDB_TOKEN secret.
-    "TMDB_PROXY": "on"
+    "TMDB_PROXY": "on",
+    // The weekly backup asks D1 to export this database (server/src/backup.js). Same id as the
+    // DB binding below. It also needs the BACKUP_API_TOKEN secret (docs/DEVELOPMENT.md).
+    "BACKUP_DATABASE_ID": "1078bee2-1185-43bd-9ebf-120384890ceb"
   },
   "d1_databases": [
     {
