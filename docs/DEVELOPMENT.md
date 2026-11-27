@@ -324,6 +324,17 @@ The owner's **admin page** (`public/admin.html`, `admin.js`; roadmap Phase 8 par
   what opens the page there. The page shows a signed-in account its id if it isn't the admin,
   for copying into the secret. If the owner's account started out waiting for approval, opening
   the admin page activates it.
+- **Cloudflare Access** guards the page and its API as a second lock (set up in the dashboard,
+  nothing in the code): Zero Trust (free plan, team `watchlog`) → Access → Applications →
+  **Watchlog admin**, a self-hosted application on `watchlogtracker.com` with paths `admin*`
+  and `v1/admin*`, session 24 hours, policy **Owner only** (Allow, Include → Emails → the owner's
+  address), login method One-time PIN (an emailed code). So opening the admin page asks for that
+  code first; the API checks the admin account as before. Side effects: the admin page doesn't
+  work inside the Android app (its requests come from `https://localhost` and can't carry the
+  Access cookie), so use a browser; the join banner, push and email still reach every device.
+  Another admin needs their email added to the policy as well as their id to `ADMIN_ACCOUNT_IDS`.
+  Anything else (the app, `/v1/push/...`, sync) is outside Access. The service worker copes:
+  a page Access blocks isn't cached.
 - **Sign-up modes** (`server/src/settings.js`, changed on the admin page): `closed`,
   `invite` (an invite code is required), `approval` (the default: anyone can ask, and waits as
   `pending` until approved; an invite code skips the wait) and `open`. While there's no account
