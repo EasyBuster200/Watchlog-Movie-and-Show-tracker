@@ -2,7 +2,7 @@
 //
 //   GET    /v1/push/key            -> { publicKey }   (404 push_unavailable when not set up)
 //   PUT    /v1/push/subscription   { endpoint, keys: { p256dh, auth }, kinds, timeZone, region }
-//          this device's subscription. kinds: { requests, episodes, releases, recap } booleans
+//          this device's subscription. kinds: { requests, episodes, releases, recap, friends } booleans
 //          (without it: sign-up requests only, as the first admin page sent). timeZone is an IANA
 //          name, region an ISO 3166-1 code; the hourly job (notifications.js) uses both.
 //   DELETE /v1/push/subscription   { endpoint }
@@ -50,13 +50,13 @@ route('PUT', '/push/subscription', async ({ request, env }) => {
   const f = sub.flags;
   await env.DB.prepare(
     `INSERT INTO push_subscriptions (id, account_id, session_id, endpoint, p256dh, auth, created_at,
-       notify_requests, notify_episodes, notify_releases, notify_recap, time_zone, region)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       notify_requests, notify_episodes, notify_releases, notify_recap, notify_friends, time_zone, region)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (id) DO UPDATE SET account_id = excluded.account_id, session_id = excluded.session_id, p256dh = excluded.p256dh, auth = excluded.auth,
        notify_requests = excluded.notify_requests, notify_episodes = excluded.notify_episodes, notify_releases = excluded.notify_releases,
-       notify_recap = excluded.notify_recap, time_zone = excluded.time_zone, region = excluded.region`
-  ).bind(id, account.id, session.id, sub.endpoint, sub.p256dh, sub.auth, nowIso(), f.requests, f.episodes, f.releases, f.recap, sub.timeZone, sub.region).run();
-  return json({ ok: true, kinds: { requests: !!f.requests, episodes: !!f.episodes, releases: !!f.releases, recap: !!f.recap } });
+       notify_recap = excluded.notify_recap, notify_friends = excluded.notify_friends, time_zone = excluded.time_zone, region = excluded.region`
+  ).bind(id, account.id, session.id, sub.endpoint, sub.p256dh, sub.auth, nowIso(), f.requests, f.episodes, f.releases, f.recap, f.friends, sub.timeZone, sub.region).run();
+  return json({ ok: true, kinds: { requests: !!f.requests, episodes: !!f.episodes, releases: !!f.releases, recap: !!f.recap, friends: !!f.friends } });
 });
 
 route('DELETE', '/push/subscription', async ({ request, env }) => {

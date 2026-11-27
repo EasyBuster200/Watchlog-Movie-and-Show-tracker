@@ -265,6 +265,60 @@ async function confirmEmailChange(profile, email, code) {
   return data;
 }
 
+// ---------- Friends (roadmap Phase 7; server/src/routes/friends.js) ----------
+// Found by friend code only (decided with the user). What friends see is the account's share
+// level: 'everything' (the default), 'lists' (lists and favourites) or 'nothing'.
+
+const SHARE_LEVELS = [
+  { value: 'everything', label: 'Everything', sub: 'Your watched movies and shows, favourites, lists and Watchlist' },
+  { value: 'lists', label: 'Lists and favourites', sub: 'Not what you watch' },
+  { value: 'nothing', label: 'Nothing', sub: 'Friends only see your name' },
+];
+
+// { code, shareLevel, friends, incoming, outgoing, blocked }
+function getFriends(profile) {
+  return accountRequest(profile, 'GET', '/v1/friends');
+}
+
+function makeNewFriendCode(profile) {
+  return accountRequest(profile, 'POST', '/v1/friends/code');
+}
+
+function setShareLevel(profile, shareLevel) {
+  return accountRequest(profile, 'PUT', '/v1/friends/settings', { shareLevel });
+}
+
+// Resolves { status: 'sent' | 'friends', friend: { id, displayName } }.
+function sendFriendRequest(profile, code) {
+  return accountRequest(profile, 'POST', '/v1/friends/requests', { code });
+}
+
+function acceptFriendRequest(profile, accountId) {
+  return accountRequest(profile, 'POST', `/v1/friends/requests/${encodeURIComponent(accountId)}/accept`);
+}
+
+// Declines a request from them, or cancels one to them.
+function dropFriendRequest(profile, accountId) {
+  return accountRequest(profile, 'DELETE', `/v1/friends/requests/${encodeURIComponent(accountId)}`);
+}
+
+function removeFriend(profile, accountId) {
+  return accountRequest(profile, 'DELETE', `/v1/friends/${encodeURIComponent(accountId)}`);
+}
+
+function blockAccount(profile, accountId) {
+  return accountRequest(profile, 'POST', `/v1/friends/${encodeURIComponent(accountId)}/block`);
+}
+
+function unblockAccount(profile, accountId) {
+  return accountRequest(profile, 'DELETE', `/v1/friends/blocks/${encodeURIComponent(accountId)}`);
+}
+
+// What a friend shares: { friend, shareLevel, favorites?, lists?, watchlist?, movies?, shows? }.
+function getFriendLibrary(profile, accountId) {
+  return accountRequest(profile, 'GET', `/v1/friends/${encodeURIComponent(accountId)}/library`);
+}
+
 // ---------- Recovering an account with its email ----------
 // "Lost your key?": a code to the email, then a 24-hour hold (any signed-in device can cancel),
 // then this device finishes it and gets a new key. The waiting recoveries are kept on this
@@ -373,7 +427,7 @@ async function deleteOnlineAccount(profile) {
 // The Android app keeps its own local notifications (notifications.js) and never subscribes.
 
 const PUSH_DEVICE_KEY = 'watchlog_push_device';
-const PUSH_KIND_NAMES = ['requests', 'episodes', 'releases', 'recap'];
+const PUSH_KIND_NAMES = ['requests', 'episodes', 'releases', 'recap', 'friends'];
 
 function webPushSupported() {
   return typeof navigator !== 'undefined' && 'serviceWorker' in navigator && typeof window !== 'undefined' &&

@@ -242,6 +242,8 @@ The site and the APK are public, so assume anyone can open the app. Several laye
 
 ## Phase 7: Friends
 
+**Step 1 is built** (`server/src/routes/friends.js`, `public/friends.html`, `friend.html`; `docs/DEVELOPMENT.md`, "Friends"): friend codes, requests (accept, decline, cancel), removing and blocking, what friends see, and a friend's profile. Decided with the user: people find each other **by friend code only** (no usernames, no search); friends see **everything by default** (the setting is "What your friends see": everything, lists and favourites, or nothing; per account, not per list yet); a new request shows as a banner on every device and as a Web Push notification where "Friend requests" is switched on (the Android app gets the banner). Next: "friends watched this" on title pages, the activity feed, recommending a title, shared lists, taste match.
+
 ### Privacy first
 
 Each online account has a **privacy setting**, synced and enforced **on the server** (never trusted from the app):
@@ -345,7 +347,7 @@ People's watch history and lists are **not** visible on the admin page. It shows
 5. Phase 8 (part 1): admin page with users, invites, limits and kill switch. **Done** (after Phase 4), with Web Push for sign-up requests.
 6. Phase 4: sync, then remove auto-backup and add the local-account backup reminder
 7. Phase 6: server notifications. **Done**
-8. Phase 7: friends
+8. Phase 7: friends (step 1 done: codes, requests, profiles)
 9. Phase 8 (part 2): the rest of the admin page
 
 Each step leaves a working app.

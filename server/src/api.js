@@ -19,6 +19,7 @@ import './routes/tmdb.js';
 import './routes/sync.js';
 import './routes/push.js';
 import './routes/admin.js';
+import './routes/friends.js';
 
 export { API_PREFIX };
 

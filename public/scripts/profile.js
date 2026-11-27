@@ -2,6 +2,16 @@
 // status), the summary stats, then previews of watched and favourite movies and shows. Backups,
 // notifications and account actions live in Settings (settings.js).
 
+// The Friends row (friends.html): how many requests wait, from the last sync (sync.js).
+function renderFriendsLink(user) {
+  const sub = document.getElementById('friends-link-sub');
+  if (!sub) return;
+  const account = user.account;
+  if (!account) sub.textContent = 'Needs an online account';
+  else if (account.friendRequests) sub.textContent = account.friendRequests === 1 ? '1 friend request' : `${account.friendRequests} friend requests`;
+  else sub.textContent = 'Your friends, and adding new ones with a friend code';
+}
+
 function renderHeader(user) {
   document.getElementById('profile-name').textContent = user.displayName;
   const since = new Date(user.createdAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
@@ -119,6 +129,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!user) return;
 
   renderHeader(user);
+  renderFriendsLink(user);
   renderAutoBackupStatus(user);
   // The page-load run (autoBackup.js) may finish after this renders - refresh once it has.
   if (isNativeApp()) {
