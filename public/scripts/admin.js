@@ -19,7 +19,7 @@ const SIGNUP_MODE_TEXT = {
 
 const ACTION_TEXT = {
   approve: 'Approved', decline: 'Declined', delete: 'Deleted', suspend: 'Suspended', unsuspend: 'Unsuspended',
-  'sign-out': 'Signed out', 'invite.create': 'Made an invite', 'invite.cancel': 'Cancelled an invite', settings: 'Changed settings',
+  'sign-out': 'Signed out', 'new-key': 'Emailed a new key', 'recovery.cancel': 'Cancelled a recovery', 'invite.create': 'Made an invite', 'invite.cancel': 'Cancelled an invite', settings: 'Changed settings',
 };
 
 function adminRequest(method, path, body) {
@@ -262,6 +262,32 @@ async function userMenu(user) {
   };
   if (user.status === 'pending') add('Approve', 'primary', () => act(() => adminRequest('POST', `/users/${user.id}/approve`)));
   if (user.devices) add('Sign out all their devices', 'secondary', () => act(() => adminRequest('POST', `/users/${user.id}/sign-out`)));
+  if (user.recoveryUntil) {
+    add('Cancel their recovery', 'secondary', async () => {
+      const ok = await confirmDialog({
+        title: `Cancel ${user.displayName}'s recovery?`,
+        message: `Someone asked to recover this account with its email; it would get a new key on ${new Date(user.recoveryUntil).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}. Cancel it if it wasn't them. They're told by email.`,
+        confirmLabel: 'Cancel the recovery',
+        cancelLabel: 'Keep it',
+        danger: true,
+      });
+      if (ok) await act(() => adminRequest('DELETE', `/users/${user.id}/recovery`));
+    });
+  }
+  if (user.status === 'active' && user.email) {
+    add('Email them a new key', 'secondary', async () => {
+      const ok = await confirmDialog({
+        title: `Email ${user.displayName} a new key?`,
+        message: "For someone who lost their key and can't use \"Lost your key?\". A new account key goes to the account's own email; you never see it. Their old key stops working, every device is signed out, and any recovery is cancelled. Their library stays.",
+        confirmLabel: 'Send a new key',
+      });
+      if (!ok) return;
+      await act(async () => {
+        const reply = await adminRequest('POST', `/users/${user.id}/new-key`);
+        await confirmDialog({ title: 'New key sent', message: `It went to ${reply.sentTo}. Tell ${user.displayName} to check that inbox (and spam).`, confirmLabel: 'OK', cancelLabel: 'Close' });
+      });
+    });
+  }
   if (user.status === 'suspended') add('Unsuspend', 'secondary', () => act(() => adminRequest('POST', `/users/${user.id}/unsuspend`)));
   if (user.status === 'active') {
     add('Suspend', 'secondary', async () => {
@@ -283,7 +309,7 @@ function renderUsers(users) {
   const card = section(`Accounts (${others.length})`);
   others.forEach(user => {
     const label = user.isAdmin ? `${user.displayName} (you, admin)` : user.displayName;
-    const sub = [STATUS_LABEL[user.status], `last seen ${when(user.lastSeen)}`, `${user.devices} device${user.devices === 1 ? '' : 's'}`, `${user.records} records`].filter(Boolean).join(' · ');
+    const sub = [STATUS_LABEL[user.status], user.recoveryUntil ? 'recovery in progress' : null, `last seen ${when(user.lastSeen)}`, `${user.devices} device${user.devices === 1 ? '' : 's'}`, `${user.records} records`].filter(Boolean).join(' · ');
     card.appendChild(row(label, sub, user.isAdmin ? [] : [smallButton('Manage', 'secondary', () => userMenu(user))]));
   });
 }

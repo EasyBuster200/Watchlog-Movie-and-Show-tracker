@@ -8,6 +8,8 @@
 //   POST   /v1/admin/users/:id/suspend      signed out everywhere, can't sign in
 //   POST   /v1/admin/users/:id/unsuspend
 //   POST   /v1/admin/users/:id/sign-out     signs out all its devices
+//   POST   /v1/admin/users/:id/new-key      a new account key, emailed to them (part 2)
+//   DELETE /v1/admin/users/:id/recovery     cancels a recovery in progress (part 2)
 //   DELETE /v1/admin/users/:id              deletes it (also how a request is declined)
 //   GET    /v1/admin/invites                POST { note, days } -> { invite, code }
 //   DELETE /v1/admin/invites/:id            an unused one
@@ -18,7 +20,11 @@
 // can't lock themself out by a mis-tap).
 
 import { route, json, noContent, readJson, ApiError } from '../router.js';
-import { generatePairingCode, pairingCodeData, hashInviteCode, nowIso, cleanName } from '../auth.js';
+import {
+  generatePairingCode, pairingCodeData, hashInviteCode, nowIso, cleanName,
+  generateAccountKey, accountKeyData, hashAccountKey, rateLimit,
+} from '../auth.js';
+import { sendEmail, sendNotice, emailConfigured, adminNewKeyEmail, adminRecoveryCancelledEmail } from '../email.js';
 import { requireAdmin, isAdmin, adminIds, audit } from '../admin.js';
 import { getSettings, updateSettings } from '../settings.js';
 import { pushConfigured } from '../push.js';
@@ -82,7 +88,8 @@ route('GET', '/admin/users', async ({ request, env }) => {
             (SELECT MAX(last_used_at) FROM sessions s WHERE s.account_id = a.id) AS lastSeen,
             (SELECT COUNT(*) FROM sessions s WHERE s.account_id = a.id AND s.expires_at > ?) AS devices,
             (SELECT COUNT(*) FROM sync_records r WHERE r.account_id = a.id AND r.deleted = 0) AS records,
-            (SELECT count FROM rate_limits l WHERE l.key = 'tmdb:account:' || a.id AND l.window_start = ?) AS tmdbToday
+            (SELECT count FROM rate_limits l WHERE l.key = 'tmdb:account:' || a.id AND l.window_start = ?) AS tmdbToday,
+            (SELECT completes_at FROM recoveries r WHERE r.account_id = a.id) AS recoveryUntil
        FROM accounts a
       ORDER BY a.status = 'pending' DESC, a.created_at DESC
       LIMIT 1000`
@@ -91,7 +98,7 @@ route('GET', '/admin/users', async ({ request, env }) => {
 });
 
 async function targetAccount(env, id) {
-  const row = await env.DB.prepare('SELECT id, display_name AS displayName, status FROM accounts WHERE id = ?').bind(id).first();
+  const row = await env.DB.prepare('SELECT id, display_name AS displayName, status, email FROM accounts WHERE id = ?').bind(id).first();
   if (!row) throw new ApiError(404, 'not_found', 'There is no such account.');
   if (isAdmin(env, row.id)) throw new ApiError(400, 'is_admin', "That's an admin account; change it in ADMIN_ACCOUNT_IDS first.");
   return row;
@@ -134,6 +141,50 @@ route('POST', '/admin/users/:id/sign-out', async ({ request, env, params }) => {
   await audit(env, admin.id, 'sign-out', target.id, { name: target.displayName, devices: (result.meta && result.meta.changes) || 0 });
   return json({ ok: true });
 });
+
+// Someone who lost their key and can't use "Lost your key?" (decided with the user: the key is
+// emailed to the account's own address, never shown here). The email goes first, so a failed
+// send changes nothing; then every device is signed out and any recovery is cancelled.
+export const ADMIN_NEW_KEYS_PER_ACCOUNT = [5, 24 * 3600];
+
+route('POST', '/admin/users/:id/new-key', async ({ request, env, params }) => {
+  const { account: admin } = await requireAdmin(request, env);
+  const target = await targetAccount(env, params.id);
+  if (target.status === 'pending') throw new ApiError(400, 'is_pending', 'Approve the request first.');
+  if (!target.email) throw new ApiError(400, 'no_email', 'That account has no email address to send a key to.');
+  if (!emailConfigured(env)) throw new ApiError(503, 'email_unavailable', "Email isn't set up on this server, so the key can't be sent.");
+  await rateLimit(env, `admin-new-key:account:${target.id}`, ...ADMIN_NEW_KEYS_PER_ACCOUNT);
+  const accountKey = generateAccountKey();
+  await sendEmail(env, { to: target.email, ...adminNewKeyEmail(accountKey) });
+  const now = nowIso();
+  await env.DB.batch([
+    env.DB.prepare('UPDATE accounts SET key_hash = ?, key_changed_at = ? WHERE id = ?').bind(await hashAccountKey(accountKeyData(accountKey)), now, target.id),
+    env.DB.prepare('DELETE FROM sessions WHERE account_id = ?').bind(target.id),
+    env.DB.prepare('DELETE FROM pairing_codes WHERE account_id = ?').bind(target.id),
+    env.DB.prepare('DELETE FROM recoveries WHERE account_id = ?').bind(target.id),
+  ]);
+  await audit(env, admin.id, 'new-key', target.id, { name: target.displayName });
+  return json({ ok: true, sentTo: maskEmail(target.email) });
+});
+
+route('DELETE', '/admin/users/:id/recovery', async ({ request, env, params, ctx }) => {
+  const { account: admin } = await requireAdmin(request, env);
+  const target = await targetAccount(env, params.id);
+  const result = await env.DB.prepare('DELETE FROM recoveries WHERE account_id = ?').bind(target.id).run();
+  if (!(result.meta && result.meta.changes)) throw new ApiError(404, 'no_recovery', 'That account has no recovery in progress.');
+  if (target.email) {
+    const notice = sendNotice(env, { to: target.email, ...adminRecoveryCancelledEmail() });
+    if (ctx && ctx.waitUntil) ctx.waitUntil(notice); else await notice;
+  }
+  await audit(env, admin.id, 'recovery.cancel', target.id, { name: target.displayName });
+  return noContent();
+});
+
+// "a•••@example.com": enough for the owner to tell the person where to look.
+export function maskEmail(email) {
+  const [local, domain] = String(email).split('@');
+  return domain ? `${local.slice(0, 1)}•••@${domain}` : '•••';
+}
 
 route('DELETE', '/admin/users/:id', async ({ request, env, params }) => {
   const { account: admin } = await requireAdmin(request, env);

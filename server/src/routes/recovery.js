@@ -14,9 +14,10 @@
 // account key (the old one stops working) and signs every other device out.
 
 import { route, json, noContent, readJson, ApiError } from '../router.js';
+import { verifyTurnstile } from '../turnstile.js';
 import {
   generateAccountKey, accountKeyData, hashAccountKey, generateSessionToken, sha256,
-  createSession, requireAuth, rateLimit, clientKey, cleanName, nowIso,
+  createSession, requireAuth, rateLimit, clientKey, cleanName, nowIso, burstLimit,
 } from '../auth.js';
 import {
   normalizeEmail, hashEmail, sendEmail, sendNotice, issueEmailCode, useEmailCode,
@@ -41,8 +42,11 @@ const hashRecoveryToken = token => sha256(`recovery:${token}`);
 const INVALID_EMAIL = () => new ApiError(400, 'invalid_email', "That doesn't look like an email address.");
 
 route('POST', '/recovery/code', async ({ request, env }) => {
-  const email = normalizeEmail((await readJson(request)).email);
+  await burstLimit(env, request);
+  const body = await readJson(request);
+  const email = normalizeEmail(body.email);
   if (!email) throw INVALID_EMAIL();
+  await verifyTurnstile(env, request, body.turnstileToken);
   await limited(env, `recovery-code:client:${await clientKey(request)}`, RECOVERY_LIMITS.codesPerClient);
   await limited(env, `recovery-code:address:${await hashEmail(email)}`, RECOVERY_LIMITS.codesPerAddress);
   const account = await env.DB.prepare("SELECT id FROM accounts WHERE email_hash = ? AND status != 'suspended'")
@@ -55,6 +59,7 @@ route('POST', '/recovery/code', async ({ request, env }) => {
 });
 
 route('POST', '/recovery', async ({ request, env, ctx }) => {
+  await burstLimit(env, request);
   const body = await readJson(request);
   const email = normalizeEmail(body.email);
   if (!email) throw INVALID_EMAIL();
@@ -87,6 +92,7 @@ route('POST', '/recovery', async ({ request, env, ctx }) => {
 });
 
 route('POST', '/recovery/complete', async ({ request, env }) => {
+  await burstLimit(env, request);
   const body = await readJson(request);
   await limited(env, `recovery-complete:client:${await clientKey(request)}`, RECOVERY_LIMITS.completesPerClient);
   const token = typeof body.recoveryToken === 'string' ? body.recoveryToken : '';

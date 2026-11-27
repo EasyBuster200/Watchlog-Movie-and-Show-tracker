@@ -21,7 +21,7 @@
 // recipient's devices get a push (kind 'friends').
 
 import { route, json, noContent, readJson, ApiError } from '../router.js';
-import { requireAuth, rateLimit, pairingCodeData, generatePairingCode, nowIso } from '../auth.js';
+import { requireAuth, rateLimit, pairingCodeData, generatePairingCode, nowIso, BURST_LIMITS } from '../auth.js';
 import { notifyAccounts } from '../push.js';
 
 export const SHARE_LEVELS = ['everything', 'lists', 'nothing'];
@@ -137,6 +137,7 @@ route('PUT', '/friends/settings', async ({ request, env }) => {
 route('POST', '/friends/requests', async ({ request, env, ctx }) => {
   const { account } = await requireAuth(request, env);
   await limited(env, `friend-request:account:${account.id}`, FRIEND_LIMITS.requestsPerAccount);
+  await limited(env, `friend-request:account:${account.id}:minute`, BURST_LIMITS.friendRequestsPerMinute);
   const code = pairingCodeData((await readJson(request)).code);
   if (!code) throw new ApiError(400, 'invalid_code_format', "That doesn't look like a friend code. It's 8 letters and numbers, like ABCD-1234.");
   const target = await env.DB.prepare("SELECT id, display_name AS displayName FROM accounts WHERE friend_code = ? AND status = 'active'").bind(code).first();
