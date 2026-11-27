@@ -277,7 +277,7 @@ Local accounts have no friends features.
 ## Phase 8: Admin page
 
 **Part 1 is built** (`public/admin.html`, `server/src/routes/admin.js`; `docs/DEVELOPMENT.md`, "Admin and sign-ups"): sign-up requests (approve / decline), the sign-up mode (closed, invite-only, approval, open; **approval is the default**, decided with the user), invites, users (sign out, suspend, delete), counts, the TMDB proxy's switch and daily cap, the last backup, and the audit log. With it, online accounts stopped being hidden behind the preview switch (decided with the user). Decided differently from the plan below:
-- **The admin is an account id in the `ADMIN_ACCOUNT_IDS` Worker secret**, not a role column, and there's **no Cloudflare Access** yet: on `workers.dev` Access can only protect the whole site, not `/admin`. It can go in front of `/admin` once there's a custom domain.
+- **The admin is an account id in the `ADMIN_ACCOUNT_IDS` Worker secret**, not a role column, and **Cloudflare Access** (an emailed code, the owner's address only) guards `/admin*` and `/v1/admin*` since the move to watchlogtracker.com (`docs/DEVELOPMENT.md`, "Admin and sign-ups").
 - **The owner hears about sign-up requests** as a banner on any signed-in device (from each sync) and as a **Web Push notification** (built here, Phase 6's foundation; iPhone and browsers, not the Android app). An **email** to the owner was added with Phase 3c.
 - Not built yet from part 1: Turnstile, per-minute burst limits. Pending requests aren't cleaned up automatically.
 
