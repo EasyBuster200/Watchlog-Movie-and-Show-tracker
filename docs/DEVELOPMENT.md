@@ -302,6 +302,25 @@ list is at the top of that file.
   shows, watched movies, favourites, Watchlist, lists; cards have the usual buttons; Remove
   friend and Block). Reached from Profile's Friends row and Settings → Online account →
   Friends. Offline profiles are offered "Make this an online account".
+- **Step 2** (no new setting: it all follows the share level, decided with the user;
+  `everything` shares watching, favourites, the Watchlist and lists, `lists` only favourites and
+  list additions):
+  - `GET /v1/friends/title/:type/:id`: which friends watched (for a show: episodes watched and
+    the furthest one, specials left out), favourited or saved a title. One correlated subquery
+    per fact on `sync_records`' primary key; a show's episodes by key range
+    (`"<show>:"` to `"<show>;"`). Shown on the detail page (`detail.js`'s
+    `renderTitleFriends`: "Ana is on S3 · E4", tap for the list).
+  - `GET /v1/friends/activity`: the last 30 days (`ACTIVITY_DAYS`), at most 100 items, by the
+    records' own times (`watchedAt`/`favoritedAt`/`addedAt`, so an imported history isn't
+    news), episodes grouped per friend, show and day. Migration `0008_friend_activity.sql` adds an
+    index on `sync_records(account_id, updated_at)` for it. Shown on Home (Friends, the newest
+    3) and `activity.html`, both through `friendActivity.js`.
+  - **Taste match**, in the library reply (`tasteMatch`): watched titles (movies, and shows with
+    any watched episode) in common ÷ √(mine × theirs), as a percentage; null until both have 3
+    (`TASTE_MIN_TITLES`); plus up to 20 titles in common. On `friend.html`.
+  - Sync replies' `friends` also carry `count`, kept as `account.friendCount`; pages ask about
+    friends only when `serverApi.js`'s `canAskAboutFriends` says so (signed in, not pending, and
+    a count that isn't 0).
 
 #### Email and account recovery
 

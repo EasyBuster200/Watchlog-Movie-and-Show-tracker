@@ -207,6 +207,13 @@ every device you sign in on (phone, tablet, laptop), and you **don't need a TMDB
   favourites**, or **Nothing**.
 - **Remove friend** or **Block** is on a friend's page. **New code** stops anyone else using your
   old code.
+- **Home → Friends** shows what your friends watched, favourited and saved lately (**See all**
+  for the last 30 days). A movie or show's page says which friends watched it ("Ana is on
+  S3 · E4"); tap it to see each of them.
+- A friend's page shows your **taste match**: how much of what you've watched they've watched
+  too, and the titles you've both seen.
+- All of this follows **What your friends see**: friends who chose **Lists and favourites** only
+  show up for their favourites and lists, and **Nothing** keeps them out of it entirely.
 
 ## How to use it
 

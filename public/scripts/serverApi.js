@@ -314,9 +314,28 @@ function unblockAccount(profile, accountId) {
   return accountRequest(profile, 'DELETE', `/v1/friends/blocks/${encodeURIComponent(accountId)}`);
 }
 
-// What a friend shares: { friend, shareLevel, favorites?, lists?, watchlist?, movies?, shows? }.
+// What a friend shares: { friend, shareLevel, favorites?, lists?, watchlist?, movies?, shows?, tasteMatch? }.
 function getFriendLibrary(profile, accountId) {
   return accountRequest(profile, 'GET', `/v1/friends/${encodeURIComponent(accountId)}/library`);
+}
+
+// Friends step 2. Whether a page should ask the server about friends at all: a signed-in
+// online profile that has friends (the count comes with every sync; unknown counts as maybe).
+function canAskAboutFriends(profile) {
+  return isSignedIn(profile) && !isPendingAccount(profile) && profile.account.friendCount !== 0;
+}
+
+// Which friends watched, favourited or saved a title:
+// { friends: [{ id, displayName, watchedAt?, episodes?, latest?: { season, episode }, favorite?, watchlist? }] }.
+function getTitleFriends(profile, mediaType, tmdbId) {
+  return accountRequest(profile, 'GET', `/v1/friends/title/${encodeURIComponent(mediaType)}/${encodeURIComponent(tmdbId)}`);
+}
+
+// What friends did in the last 30 days, newest first: { items, days }. Each item has type
+// 'episodes' | 'watched' | 'favorite' | 'watchlist' | 'list', friend, at, mediaType, tmdbId, and
+// the title's display fields when the record carries them.
+function getFriendActivity(profile) {
+  return accountRequest(profile, 'GET', '/v1/friends/activity');
 }
 
 // ---------- Recovering an account with its email ----------

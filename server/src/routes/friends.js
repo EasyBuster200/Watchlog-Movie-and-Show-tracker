@@ -11,7 +11,9 @@
 //   DELETE /v1/friends/:id                   stop being friends
 //   POST   /v1/friends/:id/block             block (also ends the friendship and any requests)
 //   DELETE /v1/friends/blocks/:id            unblock
-//   GET    /v1/friends/:id/library           what that friend shares
+//   GET    /v1/friends/:id/library           what that friend shares, plus your taste match
+//   GET    /v1/friends/title/:type/:id       which friends watched, favourited or saved a title
+//   GET    /v1/friends/activity              what friends did in the last 30 days
 //
 // Every rule is checked here, never trusted from the app: only friends see a library, and only
 // as much as its owner's share level allows. A blocked account is told "nobody has that code".
@@ -242,5 +244,152 @@ route('GET', '/friends/:id/library', async ({ request, env, params }) => {
   reply.watchlist = items.results.filter(i => i.list === WATCHLIST_SYNC_ID).map(({ list: _l, ...i }) => i);
   reply.movies = movies.results;
   reply.shows = shows.results;
+  reply.tasteMatch = await tasteMatch(env, account.id, friend.id, movies.results, shows.results);
   return json(reply);
+});
+
+// ---------- Step 2: friends on a title, the activity feed, taste match ----------
+// All of it follows "What your friends see" (decided with the user, no separate switch):
+// 'everything' shares watching, favourites, the Watchlist and lists; 'lists' shares favourites
+// and list additions (not the Watchlist); 'nothing' shares none of it.
+
+export const ACTIVITY_DAYS = 30;
+export const ACTIVITY_LIMIT = 100;
+export const TASTE_MIN_TITLES = 3;
+const TASTE_TITLES = 20;
+
+// My friends who share something, with their share level. Plain `?`s (the id three times),
+// since an account's friends come from both columns of `friendships`.
+const SHARING_FRIENDS = `SELECT a.id, a.display_name AS displayName, a.share_level AS level FROM friendships f
+  JOIN accounts a ON a.id = CASE WHEN f.account_a = ? THEN f.account_b ELSE f.account_a END
+  WHERE (f.account_a = ? OR f.account_b = ?) AND a.status = 'active' AND a.share_level IN ('everything', 'lists')`;
+
+// Taste match: how much two people's watched titles (movies, and shows with any watched
+// episode) overlap, as a percentage: shared / sqrt(mine × theirs), so a short library next to a
+// long one isn't 100% just because it's all in there. Null until both have TASTE_MIN_TITLES.
+async function tasteMatch(env, me, friendId, theirMovies, theirShows) {
+  const showIds = `SELECT DISTINCT json_extract(data, '$.showId') AS id FROM sync_records WHERE account_id = ? AND kind = 'watched_episode' AND deleted = 0`;
+  const [mine, sharedMovies, sharedShows] = await Promise.all([
+    env.DB.prepare(`SELECT (SELECT COUNT(*) FROM sync_records WHERE account_id = ? AND kind = 'watched_movie' AND deleted = 0) AS movies,
+                           (SELECT COUNT(*) FROM (${showIds})) AS shows`).bind(me, me).first(),
+    env.DB.prepare(`SELECT t.record_key AS k FROM sync_records t
+                      JOIN sync_records m ON m.account_id = ? AND m.kind = 'watched_movie' AND m.deleted = 0 AND m.record_key = t.record_key
+                     WHERE t.account_id = ? AND t.kind = 'watched_movie' AND t.deleted = 0`).bind(me, friendId).all(),
+    env.DB.prepare(`${showIds} INTERSECT ${showIds}`).bind(me, friendId).all(),
+  ]);
+  const myCount = (mine ? mine.movies + mine.shows : 0);
+  const theirCount = theirMovies.length + theirShows.length;
+  const movieKeys = new Set(sharedMovies.results.map(r => Number(r.k)));
+  const showKeys = new Set(sharedShows.results.map(r => Number(r.id)));
+  const shared = movieKeys.size + showKeys.size;
+  const percent = myCount >= TASTE_MIN_TITLES && theirCount >= TASTE_MIN_TITLES
+    ? Math.min(100, Math.round((100 * shared) / Math.sqrt(myCount * theirCount)))
+    : null;
+  // The titles you've both watched, most recently watched by them first.
+  const titles = [
+    ...theirMovies.filter(m => movieKeys.has(m.tmdbId)).map(m => ({ ...m, mediaType: 'movie', at: m.watchedAt })),
+    ...theirShows.filter(s => showKeys.has(s.tmdbId)).map(s => ({ mediaType: 'tv', tmdbId: s.tmdbId, at: s.lastWatchedAt })),
+  ].sort((a, b) => String(b.at || '').localeCompare(String(a.at || ''))).slice(0, TASTE_TITLES);
+  return { percent, shared, mine: myCount, theirs: theirCount, titles };
+}
+
+// Which friends watched, favourited or saved one title: "2 friends watched this", "Ana is on S3E4".
+route('GET', '/friends/title/:type/:id', async ({ request, env, params }) => {
+  const { account } = await requireAuth(request, env);
+  const type = params.type;
+  const tmdbId = Number(params.id);
+  if (!['movie', 'tv'].includes(type) || !Number.isInteger(tmdbId) || tmdbId <= 0) throw new ApiError(400, 'invalid_title', 'That title is not valid.');
+  const me = account.id;
+  // One correlated subquery per fact, each on sync_records' primary key (account, kind, key).
+  // Episode keys are "<show>:<season>:<episode>", so a key range finds one show's episodes
+  // (";" sorts right after ":"); specials (season 0) don't count.
+  const one = (kind, expr, extra = '') => `(SELECT ${expr} FROM sync_records r WHERE r.account_id = f.id AND r.kind = '${kind}' AND r.deleted = 0 ${extra})`;
+  const episodeRange = "AND r.record_key >= ? AND r.record_key < ? AND json_extract(r.data, '$.seasonNumber') > 0";
+  const watchedCols = type === 'movie'
+    ? `${one('watched_movie', "json_extract(r.data, '$.watchedAt')", 'AND r.record_key = ?')} AS watchedAt, NULL AS episodes, NULL AS latest`
+    : `${one('watched_episode', "MAX(json_extract(r.data, '$.watchedAt'))", episodeRange)} AS watchedAt,
+       ${one('watched_episode', 'COUNT(*)', episodeRange)} AS episodes,
+       ${one('watched_episode', "MAX(json_extract(r.data, '$.seasonNumber') * 10000 + json_extract(r.data, '$.episodeNumber'))", episodeRange)} AS latest`;
+  const range = [`${tmdbId}:`, `${tmdbId};`];
+  const watchedParams = type === 'movie' ? [String(tmdbId)] : [...range, ...range, ...range];
+  const rows = await env.DB.prepare(
+    `SELECT f.id, f.displayName, f.level, ${watchedCols},
+            ${one('favorite', '1', 'AND r.record_key = ?')} AS favorite,
+            ${one('list_item', '1', 'AND r.record_key = ?')} AS watchlist
+       FROM (${SHARING_FRIENDS}) f`
+  ).bind(...watchedParams, `${type}:${tmdbId}`, `${WATCHLIST_SYNC_ID}:${type}:${tmdbId}`, me, me, me).all();
+  const friends = [];
+  for (const row of rows.results) {
+    const everything = row.level === 'everything';
+    const entry = { id: row.id, displayName: row.displayName };
+    if (everything && row.watchedAt) {
+      entry.watchedAt = row.watchedAt;
+      if (type === 'tv') {
+        entry.episodes = row.episodes;
+        entry.latest = { season: Math.floor(row.latest / 10000), episode: row.latest % 10000 };
+      }
+    }
+    if (row.favorite) entry.favorite = true;
+    if (everything && row.watchlist) entry.watchlist = true;
+    if (entry.watchedAt || entry.favorite || entry.watchlist) friends.push(entry);
+  }
+  friends.sort((a, b) => String(b.watchedAt || '').localeCompare(String(a.watchedAt || '')) || a.displayName.localeCompare(b.displayName));
+  return json({ friends });
+});
+
+// What friends did lately (ACTIVITY_DAYS), newest first, at most ACTIVITY_LIMIT items. Episodes
+// are grouped per friend, show and day ("Ana watched 3 episodes of Severance"). Times are the
+// records' own (watchedAt, favoritedAt, addedAt), so an imported history doesn't flood the feed.
+route('GET', '/friends/activity', async ({ request, env }) => {
+  const { account } = await requireAuth(request, env);
+  const me = account.id;
+  const since = new Date(Date.now() - ACTIVITY_DAYS * 24 * 3600 * 1000).toISOString();
+  const friendsSql = SHARING_FRIENDS;
+  const [episodes, others] = await Promise.all([
+    env.DB.prepare(
+      `SELECT f.id AS friendId, f.displayName, CAST(json_extract(r.data, '$.showId') AS INTEGER) AS tmdbId,
+              substr(json_extract(r.data, '$.watchedAt'), 1, 10) AS day, COUNT(*) AS episodes,
+              MAX(json_extract(r.data, '$.watchedAt')) AS at,
+              MIN(json_extract(r.data, '$.seasonNumber') * 10000 + json_extract(r.data, '$.episodeNumber')) AS first,
+              MAX(json_extract(r.data, '$.seasonNumber') * 10000 + json_extract(r.data, '$.episodeNumber')) AS last
+         FROM (${friendsSql}) f JOIN sync_records r ON r.account_id = f.id
+        WHERE f.level = 'everything' AND r.kind = 'watched_episode' AND r.deleted = 0
+          AND r.updated_at >= ? AND json_extract(r.data, '$.watchedAt') >= ?
+        GROUP BY f.id, tmdbId, day ORDER BY at DESC LIMIT ?`
+    ).bind(me, me, me, since, since, ACTIVITY_LIMIT).all(),
+    env.DB.prepare(
+      `SELECT f.id AS friendId, f.displayName, r.kind, r.data,
+              COALESCE(json_extract(r.data, '$.watchedAt'), json_extract(r.data, '$.favoritedAt'), json_extract(r.data, '$.addedAt')) AS at,
+              json_extract(l.data, '$.name') AS listName
+         FROM (${friendsSql}) f JOIN sync_records r ON r.account_id = f.id
+         LEFT JOIN sync_records l ON l.account_id = r.account_id AND l.kind = 'list' AND l.deleted = 0
+                                 AND l.record_key = json_extract(r.data, '$.list')
+        WHERE r.deleted = 0 AND r.updated_at >= ?
+          AND (   (r.kind = 'watched_movie' AND f.level = 'everything')
+               OR  r.kind = 'favorite'
+               OR (r.kind = 'list_item' AND json_extract(r.data, '$.list') = '${WATCHLIST_SYNC_ID}' AND f.level = 'everything')
+               OR (r.kind = 'list_item' AND l.record_key IS NOT NULL))
+          AND COALESCE(json_extract(r.data, '$.watchedAt'), json_extract(r.data, '$.favoritedAt'), json_extract(r.data, '$.addedAt')) >= ?
+        ORDER BY at DESC LIMIT ?`
+    ).bind(me, me, me, since, since, ACTIVITY_LIMIT).all(),
+  ]);
+  const ep = n => ({ season: Math.floor(n / 10000), episode: n % 10000 });
+  const items = [
+    ...episodes.results.map(r => ({
+      type: 'episodes', friend: { id: r.friendId, displayName: r.displayName }, at: r.at,
+      mediaType: 'tv', tmdbId: r.tmdbId, episodes: r.episodes, first: ep(r.first), last: ep(r.last),
+    })),
+    ...others.results.map(r => {
+      const data = JSON.parse(r.data);
+      const item = {
+        type: r.kind === 'watched_movie' ? 'watched' : r.kind === 'favorite' ? 'favorite' : r.listName ? 'list' : 'watchlist',
+        friend: { id: r.friendId, displayName: r.displayName }, at: r.at,
+        mediaType: r.kind === 'watched_movie' ? 'movie' : data.mediaType, tmdbId: Number(data.tmdbId),
+      };
+      if (r.listName) item.listName = r.listName;
+      for (const field of ['title', 'year', 'releaseDate', 'posterPath', 'voteAverage']) if (data[field] != null) item[field] = data[field];
+      return item;
+    }),
+  ].sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, ACTIVITY_LIMIT);
+  return json({ items, days: ACTIVITY_DAYS });
 });

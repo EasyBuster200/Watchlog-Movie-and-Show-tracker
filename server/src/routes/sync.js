@@ -102,11 +102,13 @@ route('POST', '/sync', async ({ request, env }) => {
   // A recovery waiting out its hold: every signed-in device shows "Not you? Cancel" (recovery.js).
   const recovery = await env.DB.prepare('SELECT completes_at AS completesAt FROM recoveries WHERE account_id = ?').bind(account.id).first();
   if (recovery) reply.recovery = { completesAt: recovery.completesAt };
-  // Friend requests waiting for this account (routes/friends.js): every device shows a banner.
-  const requests = await env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM friend_requests r JOIN accounts a ON a.id = r.from_id WHERE r.to_id = ? AND a.status = 'active'"
-  ).bind(account.id).first();
-  if (requests && requests.n) reply.friends = { incoming: requests.n };
+  // Friends (routes/friends.js): requests waiting for this account (every device shows a banner)
+  // and how many friends it has (pages only ask the server about friends when there are some).
+  const friends = await env.DB.prepare(
+    `SELECT (SELECT COUNT(*) FROM friend_requests r JOIN accounts a ON a.id = r.from_id WHERE r.to_id = ? AND a.status = 'active') AS incoming,
+            (SELECT COUNT(*) FROM friendships WHERE account_a = ? OR account_b = ?) AS count`
+  ).bind(account.id, account.id, account.id).first();
+  if (friends && (friends.incoming || friends.count)) reply.friends = { incoming: friends.incoming, count: friends.count };
   if (isAdmin(env, account.id)) {
     const pending = await env.DB.prepare("SELECT COUNT(*) AS n FROM accounts WHERE status = 'pending'").first();
     reply.admin = { pendingRequests: pending ? pending.n : 0 };
