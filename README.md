@@ -354,9 +354,14 @@ or lose your phone without a backup, it's gone, so it's worth knowing how backup
 **Moving from Android to iPhone** (or back) works the same way: export a backup in one app, get
 the file onto the other phone (Drive, email, iCloud Drive...), and restore it there.
 
-Restoring always creates a new profile. It never overwrites one you already have. (If you
-already have a profile, **Settings → Import data** restores a backup as another profile using
-the same token.)
+Restoring from **Who's watching?** always creates a new profile. From inside a profile,
+**Settings → Import data** asks how to load the file:
+- **Merge** into this profile: everything from the backup is added. Where both have the same
+  title, the most recent wins, and nothing is removed. Lists with the same name are combined.
+  This is how to move an old offline profile into your new online account.
+- **Replace** this profile: it's emptied first (on an online account, on every device), then the
+  backup is loaded.
+- **Import as a new profile**, using the same token.
 
 > **After reinstalling the Android app,** Android doesn't let the new install delete backup files made by the
 > old one, so old files can pile up in **Documents → Watchlog**. Delete them yourself from the
