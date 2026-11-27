@@ -366,8 +366,25 @@ test('friends: the app calls the right routes, and keeps the request count from 
   assert.equal((await app.run("setShareLevel(getActiveProfile(), 'lists')")).shareLevel, 'lists');
   assert.equal((await app.run("getFriendLibrary(getActiveProfile(), 'acc-2')")).shareLevel, 'nothing');
 
-  app.run('noteFriendRequests(getActiveProfile(), { incoming: 2 })');
+  assert.equal(app.run('canAskAboutFriends(getActiveProfile())'), true, 'friend count not known yet: ask');
+  app.run('noteFriendRequests(getActiveProfile(), { incoming: 2, count: 3 })');
   assert.equal(activeAccount(app).friendRequests, 2);
+  assert.equal(activeAccount(app).friendCount, 3);
   app.run('noteFriendRequests(getActiveProfile(), undefined)');
   assert.equal(activeAccount(app).friendRequests, 0, 'cleared once none are waiting');
+  assert.equal(activeAccount(app).friendCount, 0);
+  assert.equal(app.run('canAskAboutFriends(getActiveProfile())'), false, 'no friends: pages leave the server alone');
+});
+
+test('friends step 2: friends on a title and the activity feed call the right routes', async () => {
+  const app = createApp({
+    server: fakeServer({
+      'GET /v1/friends/title/tv/1399': { body: { friends: [{ id: 'acc-2', displayName: 'Rui', episodes: 3, latest: { season: 1, episode: 3 } }] } },
+      'GET /v1/friends/activity': { body: { items: [], days: 30 } },
+    }),
+  });
+  const id = app.run('getActiveProfileId()');
+  app.run(`linkProfileToAccount('${id}', ${JSON.stringify(signInReply().body)})`);
+  assert.equal((await app.run("getTitleFriends(getActiveProfile(), 'tv', 1399)")).friends[0].displayName, 'Rui');
+  assert.equal((await app.run('getFriendActivity(getActiveProfile())')).days, 30);
 });

@@ -205,6 +205,88 @@ function renderSimilar(data, item, context) {
   document.getElementById('similar-section').hidden = false;
 }
 
+// ---------- Friends on this title (roadmap Phase 7, step 2) ----------
+// "Ana is on S3 · E4", "Ana and Rui watched this", from GET /v1/friends/title (serverApi.js's
+// getTitleFriends), as much as each friend shares. Tapping it lists them, each opening their
+// profile. Only for a signed-in online profile with friends.
+
+function friendNames(friends) {
+  const names = friends.map(f => f.displayName);
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names[0]}, ${names[1]} and ${names.length - 2} more`;
+}
+
+function titleFriendsSummary(friends, mediaType) {
+  const watchers = friends.filter(f => f.watchedAt);
+  if (watchers.length === 1 && mediaType === 'tv' && watchers[0].latest) {
+    const { season, episode } = watchers[0].latest;
+    return `${watchers[0].displayName} is on S${season} · E${episode}`;
+  }
+  if (watchers.length) return `${friendNames(watchers)} watched this`;
+  const favourites = friends.filter(f => f.favorite);
+  if (favourites.length === friends.length) return `${friendNames(friends)} ${friends.length === 1 ? 'has' : 'have'} this in their favourites`;
+  if (friends.every(f => f.watchlist)) return `${friendNames(friends)} ${friends.length === 1 ? 'wants' : 'want'} to watch this`;
+  return `${friendNames(friends)} saved this`;
+}
+
+function titleFriendDetail(friend, mediaType) {
+  const parts = [];
+  if (friend.watchedAt) {
+    if (mediaType === 'tv' && friend.latest) {
+      parts.push(`On S${friend.latest.season} · E${friend.latest.episode}`);
+      parts.push(`${friend.episodes} episode${friend.episodes === 1 ? '' : 's'} watched`);
+    } else {
+      parts.push(`Watched ${timeAgo(friend.watchedAt).toLowerCase()}`);
+    }
+  }
+  if (friend.favorite) parts.push('Favourite');
+  if (friend.watchlist) parts.push('On their Watchlist');
+  return parts.join(' · ');
+}
+
+async function renderTitleFriends(mediaType, tmdbId) {
+  const profile = getActiveProfile();
+  if (!canAskAboutFriends(profile)) return;
+  let friends;
+  try {
+    friends = (await getTitleFriends(profile, mediaType, tmdbId)).friends;
+  } catch (error) {
+    return; // Friends are extra: the page is fine without them.
+  }
+  if (!friends.length) return;
+  const box = document.getElementById('detail-friends');
+  const toggle = el('button', 'detail-friends__summary');
+  toggle.type = 'button';
+  toggle.setAttribute('aria-expanded', 'false');
+  const faces = el('span', 'detail-friends__faces');
+  friends.slice(0, 3).forEach(f => faces.appendChild(buildFriendAvatar(f.displayName, 'friend-row__avatar detail-friends__face')));
+  toggle.appendChild(faces);
+  toggle.appendChild(el('span', 'detail-friends__text', titleFriendsSummary(friends, mediaType)));
+  const chevron = el('span', 'detail-friends__chevron');
+  chevron.innerHTML = ttIcon('chevron', { size: 18 });
+  toggle.appendChild(chevron);
+
+  const list = el('div', 'settings-card detail-friends__list');
+  list.hidden = true;
+  friends.forEach(friend => {
+    const row = el('a', 'settings-row friend-row');
+    row.href = `friend.html?id=${encodeURIComponent(friend.id)}`;
+    row.appendChild(buildFriendAvatar(friend.displayName));
+    const text = el('span', 'settings-row__text');
+    text.appendChild(el('span', 'settings-row__label', friend.displayName));
+    text.appendChild(el('span', 'settings-row__sub', titleFriendDetail(friend, mediaType)));
+    row.appendChild(text);
+    list.appendChild(row);
+  });
+  toggle.addEventListener('click', () => {
+    list.hidden = !list.hidden;
+    toggle.setAttribute('aria-expanded', String(!list.hidden));
+  });
+  box.append(toggle, list);
+  box.hidden = false;
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   const { mediaType, tmdbId } = getParams();
   if (!mediaType || !tmdbId || !['movie', 'tv'].includes(mediaType)) {
@@ -228,6 +310,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   renderHeader(data, mediaType, item);
   renderActions(data, item, context);
+  renderTitleFriends(mediaType, item.tmdbId);
   renderCast(data);
 
   if (mediaType === 'tv') renderSeasons(data, item);

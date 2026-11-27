@@ -1,5 +1,6 @@
 // Home: Continue Watching (shows in progress), Airing Soon (the next episodes of tracked
-// shows), then Trending Shows and Trending Movies.
+// shows), Friends (their latest activity, online profiles with friends only), then Trending
+// Shows and Trending Movies.
 const HOME_ROW_LIMIT = 3;
 
 async function loadTrendingRow(mediaType, containerId, context) {
@@ -79,9 +80,18 @@ async function loadAiringSoon() {
   }
 }
 
+async function loadFriendsActivity() {
+  const section = document.getElementById('friends-activity-section');
+  if (!canAskAboutFriends(getActiveProfile())) return;
+  section.hidden = false;
+  const shown = await renderFriendActivity(document.getElementById('friends-activity'), { limit: HOME_ROW_LIMIT });
+  if (shown === null) section.hidden = true;
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   loadContinueWatching();
   loadAiringSoon();
+  loadFriendsActivity();
   const context = await fetchStandardActionContext();
   loadTrendingRow('tv', 'trending-shows', context);
   loadTrendingRow('movie', 'trending-movies', context);

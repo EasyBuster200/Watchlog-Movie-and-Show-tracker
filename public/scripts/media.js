@@ -623,6 +623,29 @@ function relativeAirLabel(dateStr) {
   return `In ${days} days`;
 }
 
+// "Just now", "5 min ago", "3 h ago", "Yesterday", "4 days ago", then the date: for past events
+// (friends' activity).
+function timeAgo(iso) {
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return '';
+  const minutes = Math.round((Date.now() - then.getTime()) / 60000);
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 24 * 60) return `${Math.round(minutes / 60)} h ago`;
+  const today = new Date();
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const days = Math.ceil((startOfToday - then) / 86400000);
+  if (days <= 1) return 'Yesterday';
+  if (days < 7) return `${days} days ago`;
+  return then.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+// A round avatar with a friend's initials (friends.js, friend.js, the detail page's friends).
+function buildFriendAvatar(name, className = 'friend-row__avatar') {
+  const initials = String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?';
+  return el('span', className, initials);
+}
+
 function episodeCode(seasonNumber, episodeNumber, name) {
   const hasRealName = name && !/^Episode\s+\d+$/i.test(name.trim());
   return `S${seasonNumber} · E${episodeNumber}${hasRealName ? ` · ${name}` : ''}`;

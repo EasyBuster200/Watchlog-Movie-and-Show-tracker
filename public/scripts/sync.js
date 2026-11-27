@@ -469,13 +469,18 @@ function showRecoveryWarning() {
 
 // Friend requests waiting for this account (routes/friends.js): the count is kept on the
 // account, and a "1 friend request · View" banner shows once per count per browser session.
+// The number of friends is kept too (`friendCount`), so pages with friends' activity only ask
+// the server when there are friends to ask about.
 const FRIEND_BANNER_KEY = 'watchlog_friend_banner_seen';
 
 function noteFriendRequests(profile, friends) {
   const current = getProfiles().find(p => p.id === profile.id);
   if (!current || !current.account) return;
   const count = friends ? Number(friends.incoming) || 0 : 0;
-  if ((current.account.friendRequests || 0) !== count) updateAccountFields(profile.id, { friendRequests: count });
+  const friendCount = friends ? Number(friends.count) || 0 : 0;
+  if ((current.account.friendRequests || 0) !== count || current.account.friendCount !== friendCount) {
+    updateAccountFields(profile.id, { friendRequests: count, friendCount });
+  }
   if (count) showFriendRequests(count);
 }
 

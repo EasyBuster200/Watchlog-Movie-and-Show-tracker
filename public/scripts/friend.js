@@ -55,7 +55,8 @@ function fillRow(container, items, context, detail = () => null) {
 
 async function fillRowFromTmdb(container, entries, context, detail) {
   renderSkeletonRow(container, Math.min(entries.length, 6));
-  const items = await Promise.all(entries.slice(0, ROW_LIMIT).map(e => itemFromTmdb(e.mediaType, e.tmdbId)));
+  // Entries that carry their own display fields (watched movies) need no lookup.
+  const items = await Promise.all(entries.slice(0, ROW_LIMIT).map(e => (e.title ? itemFromSummary(e, e.mediaType) : itemFromTmdb(e.mediaType, e.tmdbId))));
   if (entries.length && !items.some(Boolean)) {
     container.innerHTML = '';
     container.appendChild(el('p', 'empty-note', "Couldn't load these titles right now. Try again later."));
@@ -71,6 +72,32 @@ function renderNumbers(library) {
   grid.appendChild(buildStatTile(library.shows.length, 'Shows'));
   grid.appendChild(buildStatTile(episodes, 'Episodes watched'));
   document.getElementById('friend-sections').appendChild(grid);
+}
+
+// Taste match (friends step 2, worked out by the server): how much your watched titles and
+// theirs overlap, and the titles you've both watched.
+function renderTasteMatch(match, name, context, pending) {
+  const wrap = el('section', 'stack');
+  const head = el('div', 'tt-section');
+  head.appendChild(el('h2', null, 'Taste match'));
+  wrap.appendChild(head);
+  const card = el('div', 'settings-card taste-match');
+  if (match.percent === null) {
+    card.appendChild(el('p', 'settings-row__sub', match.mine < 3
+      ? 'Mark a few more titles watched to see how your tastes match.'
+      : `${name} needs to watch a few more titles before you can compare.`));
+  } else {
+    card.appendChild(el('p', 'taste-match__percent', `${match.percent}%`));
+    card.appendChild(el('p', 'settings-row__sub', match.shared === 1
+      ? "1 title you've both watched"
+      : `${match.shared} titles you've both watched`));
+    card.appendChild(buildProgressBar(match.percent, 100, 'Taste match'));
+  }
+  wrap.appendChild(card);
+  document.getElementById('friend-sections').appendChild(wrap);
+  if (match.titles && match.titles.length) {
+    pending.push(fillRowFromTmdb(rowSection("You've both watched", match.shared), match.titles, context));
+  }
 }
 
 async function renderLibrary(library) {
@@ -97,6 +124,7 @@ async function renderLibrary(library) {
   const pending = [];
 
   if (library.shareLevel === 'everything') {
+    if (library.tasteMatch) renderTasteMatch(library.tasteMatch, name, context, pending);
     if (library.shows.length) {
       pending.push(fillRowFromTmdb(rowSection('Watched shows', library.shows.length), library.shows.map(s => ({ ...s, mediaType: 'tv' })), context,
         item => {

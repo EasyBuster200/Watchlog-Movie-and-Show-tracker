@@ -228,7 +228,7 @@ async function render() {
     renderMessage("Couldn't load your friends", err.message || 'Try again in a moment.');
     return;
   }
-  updateAccountFields(me.id, { friendRequests: data.incoming.length });
+  updateAccountFields(me.id, { friendRequests: data.incoming.length, friendCount: data.friends.length });
   root.innerHTML = '';
   renderRequests(data);
   renderFriendList(data);
