@@ -381,3 +381,103 @@ test("restoring a backup from before sync ids gives its lists one, and keeps a s
   assert.equal(lists.find(l => l.isDefault).id, 3);
   assert.ok(lists.every(l => l.syncId));
 });
+
+// ---------- Importing a backup into a profile (backup.js's importBackupIntoProfile) ----------
+
+async function backupOf(app) {
+  return app.call('buildBackupPayload', plain(app.run('getActiveProfile()')));
+}
+
+test('merging a backup into an online profile combines both, the more recent wins, and it syncs', async () => {
+  const server = createSyncServer();
+  const phone = device(server);
+  const laptop = device(server);
+  const old = device(server, { online: false });
+
+  // Already on the account: movie 1 (watched long ago), a "Horror" list with movie 7.
+  await phone.api('POST', '/api/watched/movies/1', { title: 'One' });
+  await phone.put('watched_movies', { ...plain(await phone.getAll('watched_movies'))[0], watchedAt: '2020-01-01T00:00:00.000Z' });
+  await phone.api('POST', `/api/lists/${await createList(phone, 'Horror')}/items`, { tmdbId: 7, mediaType: 'movie' });
+  await sync(phone);
+
+  // The old offline profile: movie 1 again (more recently), movie 2, an episode, a favourite,
+  // "horror" (same list, other case) with movie 8, "Comedy" with movie 9, movie 4 on the Watchlist.
+  await old.api('POST', '/api/watched/movies/1', { title: 'One (newer)' });
+  await old.api('POST', '/api/watched/movies/2', { title: 'Two' });
+  await old.api('POST', '/api/watched/shows/10/season/1/episode/1');
+  await old.api('POST', '/api/favorites/tv/10', { title: 'Ten' });
+  await old.api('POST', `/api/lists/${await createList(old, 'horror')}/items`, { tmdbId: 8, mediaType: 'movie' });
+  await old.api('POST', `/api/lists/${await createList(old, 'Comedy')}/items`, { tmdbId: 9, mediaType: 'movie' });
+  await old.api('POST', `/api/lists/${await watchlistId(old)}/items`, { tmdbId: 4, mediaType: 'movie' });
+  const payload = await backupOf(old);
+
+  const result = await phone.call('importBackupIntoProfile', plain(phone.run('getActiveProfile()')), payload, { mode: 'merge' });
+  assert.equal(result.updated, 1, 'movie 1: the backup is more recent');
+  const merged = {
+    lists: ['Comedy', 'Horror'],
+    items: ['Comedy:movie:9', 'Horror:movie:7', 'Horror:movie:8', 'Watchlist:movie:4'],
+    movies: [1, 2],
+    episodes: ['10:1:1'],
+    favorites: ['tv:10'],
+  };
+  assert.deepEqual(await library(phone), merged);
+  assert.equal(plain(await phone.getAll('watched_movies')).find(m => m.tmdbId === 1).title, 'One (newer)');
+
+  await sync(phone);
+  await sync(laptop);
+  assert.deepEqual(await library(laptop), merged, 'the other device gets all of it');
+
+  // Merging the same backup again changes nothing.
+  assert.deepEqual(await phone.call('importBackupIntoProfile', plain(phone.run('getActiveProfile()')), payload, { mode: 'merge' }), { added: 0, updated: 0 });
+});
+
+test('replacing an online profile with a backup empties it everywhere first', async () => {
+  const server = createSyncServer();
+  const phone = device(server);
+  const laptop = device(server);
+  const old = device(server, { online: false });
+  await phone.api('POST', '/api/watched/movies/9', { title: 'Gone' });
+  await phone.api('POST', `/api/lists/${await createList(phone, 'Old list')}/items`, { tmdbId: 9, mediaType: 'movie' });
+  await sync(phone);
+  await sync(laptop);
+
+  await old.api('POST', '/api/watched/movies/2', { title: 'Two' });
+  await old.api('POST', `/api/lists/${await createList(old, 'Kept')}/items`, { tmdbId: 3, mediaType: 'movie' });
+  await phone.call('importBackupIntoProfile', plain(phone.run('getActiveProfile()')), await backupOf(old), { mode: 'replace' });
+  const replaced = { lists: ['Kept'], items: ['Kept:movie:3'], movies: [2], episodes: [], favorites: [] };
+  assert.deepEqual(await library(phone), replaced);
+  await sync(phone);
+  await sync(laptop);
+  assert.deepEqual(await library(laptop), replaced);
+});
+
+test("merging keeps watched titles off the Watchlist, on every device", async () => {
+  const server = createSyncServer();
+  const phone = device(server);
+  const laptop = device(server);
+  const old = device(server, { online: false });
+  await phone.api('POST', '/api/watched/movies/5', { title: 'Seen here' });
+  await phone.api('POST', `/api/lists/${await watchlistId(phone)}/items`, { tmdbId: 6, mediaType: 'movie' });
+  await sync(phone);
+  await sync(laptop);
+
+  // The backup has movie 5 on its Watchlist (watched here) and has watched movie 6 (on the Watchlist here).
+  await old.api('POST', `/api/lists/${await watchlistId(old)}/items`, { tmdbId: 5, mediaType: 'movie' });
+  await old.api('POST', '/api/watched/movies/6', { title: 'Seen there' });
+  await phone.call('importBackupIntoProfile', plain(phone.run('getActiveProfile()')), await backupOf(old), { mode: 'merge' });
+  assert.deepEqual((await library(phone)).items, []);
+  await sync(phone);
+  await sync(laptop);
+  assert.deepEqual(await library(laptop), { lists: [], items: [], movies: [5, 6], episodes: [], favorites: [] });
+});
+
+test('merging into an offline profile works without sync', async () => {
+  const here = createApp();
+  const old = createApp();
+  await here.api('POST', '/api/watched/movies/1', { title: 'One' });
+  await old.api('POST', '/api/watched/movies/2', { title: 'Two' });
+  const result = await here.call('importBackupIntoProfile', plain(here.run('getActiveProfile()')), await backupOf(old), { mode: 'merge' });
+  assert.equal(result.added, 1);
+  assert.deepEqual((await here.api('GET', '/api/watched/movies')).body.sort(), [1, 2]);
+  assert.equal((await here.getAll('sync_outbox')).length, 0, 'offline profiles record nothing');
+});

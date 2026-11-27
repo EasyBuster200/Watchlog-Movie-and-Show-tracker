@@ -375,8 +375,76 @@ async function exportData(row) {
   row.disabled = false;
 }
 
-// Restores a backup as a new profile. Backups never carry a TMDB token (backup.js), so the new
-// profile uses this one's.
+// How to load a backup (decided with the user): merge it into this profile (the more recent
+// wins where both have a title), replace this profile's library with it, or make a new profile.
+// Resolves 'merge' | 'replace' | 'new', or null when cancelled.
+function importChoiceDialog(payload) {
+  return new Promise(resolve => {
+    const { overlay, modal } = openDialog();
+    const close = choice => { overlay.remove(); resolve(choice); };
+    modal.appendChild(el('h2', null, 'How should we load it?'));
+    const counts = backupSummary(payload);
+    modal.appendChild(el('p', null, `"${payload.profile.displayName}": ${counts}.`));
+    const options = el('div', 'import-choices');
+    [
+      { choice: 'merge', label: `Merge into "${user.displayName}"`, sub: 'Adds everything from the backup. Where both have the same title, the most recent wins. Nothing is removed.' },
+      { choice: 'replace', label: `Replace "${user.displayName}"`, sub: user.account ? 'Empties this profile on every signed-in device, then loads the backup.' : 'Empties this profile, then loads the backup.', danger: true },
+      { choice: 'new', label: 'Import as a new profile', sub: 'Keeps this profile as it is.' },
+    ].forEach(({ choice, label, sub, danger }) => {
+      const option = el('button', `import-choice${danger ? ' import-choice--danger' : ''}`);
+      option.type = 'button';
+      option.appendChild(el('span', 'import-choice__label', label));
+      option.appendChild(el('span', 'import-choice__sub', sub));
+      option.addEventListener('click', () => close(choice));
+      options.appendChild(option);
+    });
+    modal.appendChild(options);
+    const actions = el('div', 'confirm-actions');
+    const cancel = dialogButton('Cancel', 'secondary');
+    cancel.addEventListener('click', () => close(null));
+    actions.appendChild(cancel);
+    modal.appendChild(actions);
+    overlay.addEventListener('click', event => { if (event.target === overlay) close(null); });
+  });
+}
+
+function backupSummary(payload) {
+  const shows = new Set(payload.data.watched_episodes.map(e => e.showId)).size;
+  const movies = payload.data.watched_movies.length;
+  const lists = payload.data.lists.filter(l => !l.isDefault).length;
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  return [plural(shows, 'show'), plural(movies, 'watched movie'), plural(lists, 'list')].join(', ');
+}
+
+async function importIntoThisProfile(payload, mode) {
+  if (mode === 'replace') {
+    const ok = await confirmDialog({
+      title: `Replace "${user.displayName}"?`,
+      message: user.account
+        ? 'Everything in this profile is deleted on every device signed in to the account, then the backup is loaded. This cannot be undone.'
+        : 'Everything in this profile is deleted, then the backup is loaded. This cannot be undone.',
+      confirmLabel: 'Replace',
+      danger: true,
+    });
+    if (!ok) return;
+    // Online: fetch what the account has first, so the replace covers it too.
+    if (user.account && typeof syncNow === 'function') await syncNow().catch(() => {});
+  }
+  const result = await importBackupIntoProfile(user, payload, { mode });
+  if (user.account && typeof syncNow === 'function') await syncNow().catch(() => {});
+  await confirmDialog({
+    title: 'Backup loaded',
+    message: result.added || result.updated
+      ? `${result.added} added${result.updated ? `, ${result.updated} updated to the backup's more recent version` : ''}.`
+      : 'Everything in the backup was already here.',
+    confirmLabel: 'OK',
+    cancelLabel: 'Close',
+  });
+  window.location.href = 'profile.html';
+}
+
+// Loads a backup: into this profile (merge or replace) or as a new profile. Backups never carry
+// a TMDB token (backup.js), so a new profile uses this one's.
 function initImport() {
   const input = document.getElementById('import-app-input');
   input.addEventListener('change', async () => {
@@ -385,6 +453,12 @@ function initImport() {
     if (!file) return;
     try {
       const payload = await readBackupFile(file);
+      const choice = await importChoiceDialog(payload);
+      if (!choice) return;
+      if (choice !== 'new') {
+        await importIntoThisProfile(payload, choice);
+        return;
+      }
       const profile = await restoreBackup(payload, {
         displayName: payload.profile.displayName,
         tmdbApiKey: legacyBackupApiKey(payload) || user.tmdbApiKey,
@@ -782,7 +856,7 @@ function renderSections() {
     }),
     backupNow,
     exportRow,
-    settingsRow({ label: 'Import data', sub: 'Restores a backup as a new profile', onClick: () => document.getElementById('import-app-input').click() }),
+    settingsRow({ label: 'Import data', sub: 'Load a backup into this profile, or as a new one', onClick: () => document.getElementById('import-app-input').click() }),
   ].filter(Boolean)));
 
   const online = onlineAccountSection();
