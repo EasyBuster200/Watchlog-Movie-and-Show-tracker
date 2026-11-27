@@ -9,7 +9,7 @@
 //
 // A subscription belongs to one signed-in device (push_subscriptions.session_id), so signing
 // that device out removes it. Each says which kinds it wants (notify_requests, notify_episodes,
-// notify_releases, notify_recap). Push services answer 404/410 for a subscription that's gone
+// notify_releases, notify_recap, notify_friends). Push services answer 404/410 for a subscription that's gone
 // (app uninstalled, permission withdrawn); those are deleted.
 
 import { sendWebPush } from './webpush.js';
@@ -23,6 +23,7 @@ export const PUSH_KINDS = {
   episodes: 'notify_episodes',
   releases: 'notify_releases',
   recap: 'notify_recap',
+  friends: 'notify_friends',
 };
 
 export function pushConfigured(env) {

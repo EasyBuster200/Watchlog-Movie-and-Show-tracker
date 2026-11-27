@@ -394,6 +394,7 @@ async function runSync() {
       if (offset !== null) state = { ...state, clockOffsetMs: offset };
       if (round === 0) noteAdminNews(profile, reply.admin);
       if (round === 0) noteRecovery(profile, reply.recovery);
+      if (round === 0) noteFriendRequests(profile, reply.friends);
       received += await applyIncomingChanges(db, reply.changes || [], profile);
       await clearSentChanges(db, batch);
       sent += batch.length;
@@ -463,6 +464,44 @@ function showRecoveryWarning() {
     }
   });
   toast.append(text, cancel);
+  document.body.appendChild(toast);
+}
+
+// Friend requests waiting for this account (routes/friends.js): the count is kept on the
+// account, and a "1 friend request · View" banner shows once per count per browser session.
+const FRIEND_BANNER_KEY = 'watchlog_friend_banner_seen';
+
+function noteFriendRequests(profile, friends) {
+  const current = getProfiles().find(p => p.id === profile.id);
+  if (!current || !current.account) return;
+  const count = friends ? Number(friends.incoming) || 0 : 0;
+  if ((current.account.friendRequests || 0) !== count) updateAccountFields(profile.id, { friendRequests: count });
+  if (count) showFriendRequests(count);
+}
+
+function showFriendRequests(count) {
+  if (typeof document === 'undefined' || !document.body || document.querySelector('.sync-toast')) return;
+  if (/\/friends(\.html)?$/.test(window.location.pathname)) return;
+  try {
+    if (sessionStorage.getItem(FRIEND_BANNER_KEY) === String(count)) return;
+  } catch (error) { /* no storage: just show it */ }
+  const toast = document.createElement('div');
+  toast.className = 'sync-toast';
+  toast.setAttribute('role', 'status');
+  const text = document.createElement('span');
+  text.textContent = count === 1 ? '1 friend request' : `${count} friend requests`;
+  const view = document.createElement('a');
+  view.className = 'sync-toast__action';
+  view.href = 'friends.html';
+  view.textContent = 'View';
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.setAttribute('aria-label', 'Dismiss');
+  close.textContent = '×';
+  const seen = () => { try { sessionStorage.setItem(FRIEND_BANNER_KEY, String(count)); } catch (error) { /* fine */ } };
+  view.addEventListener('click', seen);
+  close.addEventListener('click', () => { seen(); toast.remove(); });
+  toast.append(text, view, close);
   document.body.appendChild(toast);
 }
 

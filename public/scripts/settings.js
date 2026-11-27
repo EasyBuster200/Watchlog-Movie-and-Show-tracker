@@ -174,6 +174,10 @@ const NOTIFICATION_KINDS = [
   { pref: 'releaseReminders', kind: 'releases', label: 'Release reminders', sub: 'Movies on your Watchlist, on release day' },
   { pref: 'weeklyRecap', kind: 'recap', label: 'Weekly recap', sub: 'What you watched and what is coming up, Sundays at 19:00' },
 ];
+// Web only (the server sends them); the Android app shows the in-app banner instead.
+const WEB_ONLY_NOTIFICATION_KINDS = [
+  { kind: 'friends', label: 'Friend requests', sub: 'When someone wants to be your friend' },
+];
 
 // Why the web app can't turn notifications on here, or null when it can.
 function webNotificationsBlocker(profile) {
@@ -189,7 +193,7 @@ function webNotificationRows(profile) {
   const blocker = webNotificationsBlocker(profile);
   const kinds = devicePushKinds(profile);
   const granted = typeof Notification !== 'undefined' && Notification.permission === 'granted';
-  const rows = NOTIFICATION_KINDS.map(({ kind, label, sub }) => {
+  const rows = [...NOTIFICATION_KINDS, ...WEB_ONLY_NOTIFICATION_KINDS].map(({ kind, label, sub }) => {
     const row = settingsRow({
       label,
       sub,
@@ -772,6 +776,11 @@ function onlineAccountSection() {
     recoveryRow,
     adminRow,
     syncRow,
+    settingsRow({
+      label: 'Friends',
+      sub: account.friendRequests ? `${account.friendRequests} waiting for an answer` : 'Your friend code, requests and what friends see',
+      onClick: () => { window.location.href = 'friends.html'; },
+    }),
     settingsRow({ label: 'Email', sub: account.email ? `${account.email} · for getting back in if you lose your key` : 'For getting back in if you lose your key', value: 'Change', onClick: changeEmail }),
     settingsRow({
       label: 'Account key',

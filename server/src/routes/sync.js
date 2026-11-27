@@ -102,6 +102,11 @@ route('POST', '/sync', async ({ request, env }) => {
   // A recovery waiting out its hold: every signed-in device shows "Not you? Cancel" (recovery.js).
   const recovery = await env.DB.prepare('SELECT completes_at AS completesAt FROM recoveries WHERE account_id = ?').bind(account.id).first();
   if (recovery) reply.recovery = { completesAt: recovery.completesAt };
+  // Friend requests waiting for this account (routes/friends.js): every device shows a banner.
+  const requests = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM friend_requests r JOIN accounts a ON a.id = r.from_id WHERE r.to_id = ? AND a.status = 'active'"
+  ).bind(account.id).first();
+  if (requests && requests.n) reply.friends = { incoming: requests.n };
   if (isAdmin(env, account.id)) {
     const pending = await env.DB.prepare("SELECT COUNT(*) AS n FROM accounts WHERE status = 'pending'").first();
     reply.admin = { pendingRequests: pending ? pending.n : 0 };

@@ -81,7 +81,7 @@ test('subscriptions keep what the device asked for; old ones only hear about sig
   const env = await setup();
   const ana = await person(env, 'Ana');
   const answer = await subscribe(env, ana, 'https://push.example/a', { kinds: { episodes: true, recap: true }, timeZone: 'Bad/Zone', region: 'pt' });
-  assert.deepEqual(answer.body.kinds, { requests: false, episodes: true, releases: false, recap: true });
+  assert.deepEqual(answer.body.kinds, { requests: false, episodes: true, releases: false, recap: true, friends: false });
   let row = env.DB.sqlite.prepare('SELECT * FROM push_subscriptions').get();
   assert.equal(row.time_zone, null);
   assert.equal(row.region, null);

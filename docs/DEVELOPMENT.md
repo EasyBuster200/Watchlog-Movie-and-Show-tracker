@@ -276,6 +276,33 @@ is limited per address (10 per 15 minutes), and making keys and codes per accoun
 address. The weekly job (`cleanup.js`) deletes expired sessions and codes and old counters
 before the backup.
 
+#### Friends
+
+Roadmap Phase 7, step 1 (`server/src/routes/friends.js`, migration `0007_friends.sql`). Its route
+list is at the top of that file.
+
+- **Friend codes:** `XXXX-XXXX` (8 Crockford characters, `accounts.friend_code`, unique), made the
+  first time `GET /v1/friends` is asked; **New code** replaces it. People find each other only
+  this way (decided with the user): no search, no usernames.
+- **Requests** (`friend_requests`): sending to someone who already asked you makes you friends
+  at once. Accept, decline, cancel. Up to 30 requests a day per account and 200 friends.
+  **Friendships** are one row with the smaller account id first (`friendships`).
+- **Blocking** (`blocks`) ends the friendship and any requests; the blocked account is told
+  "Nobody has that friend code" either way.
+- **What friends see** (`accounts.share_level`, decided with the user: `everything` by
+  default; `lists` = lists and favourites; `nothing`). `GET /v1/friends/:id/library` checks the
+  friendship and the level on every request, reads `sync_records` with `json_extract` so D1
+  does the work (watched episodes come back as one row per show with a count), and never
+  includes preferences.
+- **Hearing about requests:** sync replies carry `friends: { incoming }` (banner on every device,
+  `sync.js`'s `noteFriendRequests`), and the recipient's devices get a push of kind `friends`
+  (`push_subscriptions.notify_friends`, Settings → Notifications → Friend requests, web only).
+- **App:** `friends.html` (requests, friends, your code with Copy/Share/New code, Add a friend,
+  What your friends see, Blocked) and `friend.html?id=` (numbers, then poster rows: watched
+  shows, watched movies, favourites, Watchlist, lists; cards have the usual buttons; Remove
+  friend and Block). Reached from Profile's Friends row and Settings → Online account →
+  Friends. Offline profiles are offered "Make this an online account".
+
 #### Email and account recovery
 
 Every online account has a **verified email** (roadmap Phase 3c), used only to get back in

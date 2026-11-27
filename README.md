@@ -194,6 +194,20 @@ every device you sign in on (phone, tablet, laptop), and you **don't need a TMDB
 - An existing offline profile can become an online account in **Settings → Make this an online
   account**; everything in it is kept.
 
+### Friends (online accounts)
+
+- Open **Profile → Friends**. Your **friend code** (like `XP0H-1WGK`) is there: send it to a
+  friend (**Copy** or **Share**). Nobody can find you any other way.
+- To add someone, type their code under **Add a friend** and tap **Send request**. They accept
+  it on their Friends page (a "friend request" banner tells them, and a notification if they
+  switched on **Settings → Notifications → Friend requests** in the web app).
+- Tap a friend to see their library: what they've watched, their favourites, Watchlist and
+  lists. Tap a title to open it, or save it to your own Watchlist from its card.
+- **What your friends see** (on the Friends page): **Everything** (the default), **Lists and
+  favourites**, or **Nothing**.
+- **Remove friend** or **Block** is on a friend's page. **New code** stops anyone else using your
+  old code.
+
 ## How to use it
 
 The bar at the bottom of the screen has six tabs: **Home**, **Watchlist**, **Lists**,

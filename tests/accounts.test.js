@@ -259,8 +259,8 @@ test("this device's notification switches belong to one profile and are forgotte
   const id = app.run('getActiveProfileId()');
   app.run(`linkProfileToAccount('${id}', ${JSON.stringify(signInReply().body)})`);
   app.run(`localStorage.setItem(PUSH_DEVICE_KEY, JSON.stringify({ profileId: '${id}', kinds: { episodes: true, recap: true }, timeZone: 'Europe/Lisbon', region: 'PT' }))`);
-  assert.deepEqual(JSON.parse(JSON.stringify(app.run('devicePushKinds(getActiveProfile())'))), { requests: false, episodes: true, releases: false, recap: true });
-  assert.deepEqual(JSON.parse(JSON.stringify(app.run("devicePushKinds({ id: 'someone-else' })"))), { requests: false, episodes: false, releases: false, recap: false });
+  assert.deepEqual(JSON.parse(JSON.stringify(app.run('devicePushKinds(getActiveProfile())'))), { requests: false, episodes: true, releases: false, recap: true, friends: false });
+  assert.deepEqual(JSON.parse(JSON.stringify(app.run("devicePushKinds({ id: 'someone-else' })"))), { requests: false, episodes: false, releases: false, recap: false, friends: false });
   assert.equal(app.run('webPushSupported()'), false, 'no push in the test page');
   await app.run('signOutOnlineAccount(getActiveProfile())');
   assert.equal(app.run('localStorage.getItem(PUSH_DEVICE_KEY)'), null);
@@ -332,4 +332,42 @@ test('a signed-in device learns about a recovery from sync, and can cancel it', 
   app.run("noteRecovery(getActiveProfile(), { completesAt: '2026-11-28T12:00:00.000Z' })");
   app.run('noteRecovery(getActiveProfile(), undefined)');
   assert.equal(activeAccount(app).recovery, null, 'cleared once the sync reply stops mentioning it');
+});
+
+test('friends: the app calls the right routes, and keeps the request count from sync', async () => {
+  const app = createApp({
+    server: fakeServer({
+      'GET /v1/friends': { body: { code: 'ABCD-1234', shareLevel: 'everything', friends: [], incoming: [], outgoing: [], blocked: [] } },
+      'POST /v1/friends/requests': req => ({ status: 201, body: { status: 'sent', friend: { id: 'acc-2', displayName: 'Rui' }, code: req.body.code } }),
+      'POST /v1/friends/requests/acc-2/accept': { status: 204 },
+      'DELETE /v1/friends/requests/acc-2': { status: 204 },
+      'DELETE /v1/friends/acc-2': { status: 204 },
+      'POST /v1/friends/acc-2/block': { status: 204 },
+      'DELETE /v1/friends/blocks/acc-2': { status: 204 },
+      'PUT /v1/friends/settings': req => ({ body: { shareLevel: req.body.shareLevel } }),
+      'GET /v1/friends/acc-2/library': { body: { friend: { id: 'acc-2', displayName: 'Rui' }, shareLevel: 'nothing' } },
+    }),
+  });
+  const id = app.run('getActiveProfileId()');
+  app.run(`linkProfileToAccount('${id}', ${JSON.stringify(signInReply().body)})`);
+  assert.equal((await app.run('getFriends(getActiveProfile())')).code, 'ABCD-1234');
+  await app.run("sendFriendRequest(getActiveProfile(), 'abcd-1234')");
+  assert.deepEqual(app.serverRequests.at(-1).body, { code: 'abcd-1234' });
+  for (const call of ['acceptFriendRequest', 'dropFriendRequest', 'removeFriend', 'blockAccount', 'unblockAccount']) {
+    await app.run(`${call}(getActiveProfile(), 'acc-2')`);
+  }
+  assert.deepEqual(app.serverRequests.slice(-5).map(r => `${r.method} ${r.path}`), [
+    'POST /v1/friends/requests/acc-2/accept',
+    'DELETE /v1/friends/requests/acc-2',
+    'DELETE /v1/friends/acc-2',
+    'POST /v1/friends/acc-2/block',
+    'DELETE /v1/friends/blocks/acc-2',
+  ]);
+  assert.equal((await app.run("setShareLevel(getActiveProfile(), 'lists')")).shareLevel, 'lists');
+  assert.equal((await app.run("getFriendLibrary(getActiveProfile(), 'acc-2')")).shareLevel, 'nothing');
+
+  app.run('noteFriendRequests(getActiveProfile(), { incoming: 2 })');
+  assert.equal(activeAccount(app).friendRequests, 2);
+  app.run('noteFriendRequests(getActiveProfile(), undefined)');
+  assert.equal(activeAccount(app).friendRequests, 0, 'cleared once none are waiting');
 });
