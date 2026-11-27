@@ -4,13 +4,13 @@
 //
 //   GET    /v1/admin/overview               counts, settings, today's TMDB use, the last backup
 //   GET    /v1/admin/users                  every account, sign-up requests first
-//   POST   /v1/admin/users/:id/approve      a request becomes an account
+//   POST   /v1/admin/users/:id/approve      a request becomes an account (they're emailed)
 //   POST   /v1/admin/users/:id/suspend      signed out everywhere, can't sign in
 //   POST   /v1/admin/users/:id/unsuspend
 //   POST   /v1/admin/users/:id/sign-out     signs out all its devices
 //   POST   /v1/admin/users/:id/new-key      a new account key, emailed to them (part 2)
 //   DELETE /v1/admin/users/:id/recovery     cancels a recovery in progress (part 2)
-//   DELETE /v1/admin/users/:id              deletes it (also how a request is declined)
+//   DELETE /v1/admin/users/:id              deletes it (also how a request is declined; emailed)
 //   GET    /v1/admin/invites                POST { note, days } -> { invite, code }
 //   DELETE /v1/admin/invites/:id            an unused one
 //   GET    /v1/admin/settings               PATCH { signupMode, tmdbProxy, tmdbDailyCap }
@@ -24,7 +24,9 @@ import {
   generatePairingCode, pairingCodeData, hashInviteCode, nowIso, cleanName,
   generateAccountKey, accountKeyData, hashAccountKey, rateLimit,
 } from '../auth.js';
-import { sendEmail, sendNotice, emailConfigured, adminNewKeyEmail, adminRecoveryCancelledEmail } from '../email.js';
+import {
+  sendEmail, sendNotice, emailConfigured, adminNewKeyEmail, adminRecoveryCancelledEmail, requestApprovedEmail, requestDeclinedEmail,
+} from '../email.js';
 import { requireAdmin, isAdmin, adminIds, audit } from '../admin.js';
 import { getSettings, updateSettings } from '../settings.js';
 import { pushConfigured } from '../push.js';
@@ -104,12 +106,22 @@ async function targetAccount(env, id) {
   return row;
 }
 
-route('POST', '/admin/users/:id/approve', async ({ request, env, params }) => {
+// The person who asked hears the answer by email (approved or declined), sent after the change
+// and in the background: a failed email doesn't undo it (sendNotice only logs).
+function tellRequester(ctx, env, email, message) {
+  if (!email) return undefined;
+  const notice = sendNotice(env, { to: email, ...message });
+  if (ctx && ctx.waitUntil) ctx.waitUntil(notice);
+  return notice;
+}
+
+route('POST', '/admin/users/:id/approve', async ({ request, env, params, ctx }) => {
   const { account: admin } = await requireAdmin(request, env);
   const target = await targetAccount(env, params.id);
   if (target.status !== 'pending') throw new ApiError(400, 'not_pending', 'That account is not waiting for approval.');
   await env.DB.prepare("UPDATE accounts SET status = 'active' WHERE id = ?").bind(target.id).run();
   await audit(env, admin.id, 'approve', target.id, { name: target.displayName });
+  tellRequester(ctx, env, target.email, requestApprovedEmail(target.displayName));
   return json({ ok: true });
 });
 
@@ -186,11 +198,14 @@ export function maskEmail(email) {
   return domain ? `${local.slice(0, 1)}•••@${domain}` : '•••';
 }
 
-route('DELETE', '/admin/users/:id', async ({ request, env, params }) => {
+route('DELETE', '/admin/users/:id', async ({ request, env, params, ctx }) => {
   const { account: admin } = await requireAdmin(request, env);
   const target = await targetAccount(env, params.id);
   await env.DB.prepare('DELETE FROM accounts WHERE id = ?').bind(target.id).run();
-  await audit(env, admin.id, target.status === 'pending' ? 'decline' : 'delete', target.id, { name: target.displayName });
+  const declined = target.status === 'pending';
+  await audit(env, admin.id, declined ? 'decline' : 'delete', target.id, { name: target.displayName });
+  // Only a declined request gets an email; deleting an existing account is the owner's business.
+  if (declined) tellRequester(ctx, env, target.email, requestDeclinedEmail(target.displayName));
   return noContent();
 });
 

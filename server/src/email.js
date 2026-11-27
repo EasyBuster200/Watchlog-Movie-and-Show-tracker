@@ -180,6 +180,25 @@ Save the key somewhere safe (a password manager is ideal), then delete this emai
   };
 }
 
+// The answer to a join request (approval mode), so nobody waits without knowing.
+export function requestApprovedEmail(displayName) {
+  return {
+    subject: "You're in: your Watchlog account is ready",
+    text: `Hi ${displayName},
+
+The owner of this Watchlog approved your request. Open Watchlog (or https://watchlogtracker.com) and you're straight in; if it still says "Waiting for approval", tap Check again.${SIGN_OFF}`,
+  };
+}
+
+export function requestDeclinedEmail(displayName) {
+  return {
+    subject: 'Your Watchlog request',
+    text: `Hi ${displayName},
+
+Your request to join this Watchlog wasn't accepted, so the account it made was removed. If you think that's a mistake, ask the owner.${SIGN_OFF}`,
+  };
+}
+
 export function adminRecoveryCancelledEmail() {
   return {
     subject: 'Recovery of your Watchlog account was cancelled',

@@ -392,7 +392,9 @@ The owner's **admin page** (`public/admin.html`, `admin.js`; roadmap Phase 8 par
   owner sees.
 - **Users:** approve, decline, sign out every device, suspend (signed out everywhere, can't sign
   in), unsuspend, delete. Admin accounts can't be changed from the page. The page shows counts,
-  never anyone's library.
+  never anyone's library. Approving or declining a request emails the person the answer
+  (`requestApprovedEmail`/`requestDeclinedEmail`, sent in the background after the change, so a
+  failed email doesn't undo it); deleting an account that was already in sends nothing.
 - **TMDB proxy:** an on/off switch and the daily cap (settings `tmdb_proxy`, `tmdb_daily_cap`),
   on top of the `TMDB_PROXY` var.
 - **Audit log:** every admin action, shown under Activity.

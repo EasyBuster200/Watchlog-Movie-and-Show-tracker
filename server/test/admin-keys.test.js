@@ -116,3 +116,25 @@ test('masking an email for the admin page', () => {
   assert.equal(maskEmail('rui@example.com'), 'r•••@example.com');
   assert.equal(maskEmail('nope'), '•••');
 });
+
+test('the person who asked to join is emailed the answer: approved or declined', withMail(async inbox => {
+  const env = createEnv({ RESEND_API_KEY: 'resend-key', signupMode: null });
+  const owner = await signUp(env, 'Owner', 'owner@example.com');
+  env.ADMIN_ACCOUNT_IDS = owner.account.id;
+  const rui = await signUp(env, 'Rui', 'rui@example.com');
+  const bea = await signUp(env, 'Bea', 'bea@example.com');
+  assert.equal(rui.account.status, 'pending');
+  inbox.length = 0;
+
+  assert.equal((await api(env, 'POST', `/v1/admin/users/${rui.account.id}/approve`, { token: owner.token })).status, 200);
+  assert.deepEqual(inbox.map(m => [m.to, m.subject]), [['rui@example.com', "You're in: your Watchlog account is ready"]]);
+
+  assert.equal((await api(env, 'DELETE', `/v1/admin/users/${bea.account.id}`, { token: owner.token })).status, 204);
+  assert.deepEqual(inbox.at(-1).to, 'bea@example.com');
+  assert.match(inbox.at(-1).text, /wasn't accepted/);
+
+  // Deleting an account that was already in sends nothing.
+  inbox.length = 0;
+  assert.equal((await api(env, 'DELETE', `/v1/admin/users/${rui.account.id}`, { token: owner.token })).status, 204);
+  assert.equal(inbox.length, 0);
+}));
