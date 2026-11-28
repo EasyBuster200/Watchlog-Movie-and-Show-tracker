@@ -757,10 +757,14 @@ route('GET', '/api/watched/shows/upcoming', async () => {
 // Airing Soon page (airing-soon.html). Starts from each show's next_episode_to_air and reads that
 // season plus any later announced seasons, so a season's whole schedule is listed - not just the
 // next episode. Today's episodes count as upcoming. Sorted by air date, then show title.
-route('GET', '/api/watched/shows/schedule', async () => {
+// ?from=YYYY-MM-DD starts the list earlier than today (the laptop Home's week strip asks for
+// this Monday); without it, today onward. Days before that come from the same seasons, so an
+// episode is only included if its season is the next episode's or a later one.
+route('GET', '/api/watched/shows/schedule', async (params, searchParams) => {
   const db = await getDb();
   const groups = await groupWatchedShows(db);
-  const today = localDateString(new Date());
+  const requested = searchParams && searchParams.get('from');
+  const today = requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) ? requested : localDateString(new Date());
 
   const perShow = await Promise.all(groups.map(async group => {
     const show = await fetchLocalTmdb(`/tv/${group.showId}`);

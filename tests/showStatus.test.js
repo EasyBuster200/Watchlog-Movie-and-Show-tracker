@@ -185,3 +185,24 @@ test('stats actors: top-billed cast counted once per title, credits cached', asy
   await app.api('GET', '/api/stats/actors');
   assert.deepEqual(app.tmdbCalls, [], 'credits come from the cache the second time');
 });
+
+test('schedule ?from= starts the list earlier, for the laptop week strip', async () => {
+  const app = createApp({
+    tmdb: {
+      '/tv/1': show(1, { counts: [3, 3], lastAired: [2, 1], next: { season_number: 2, episode_number: 2, air_date: dateOnly(daysFromNow(2)) } }),
+      '/tv/1/season/2': {
+        episodes: [
+          { episode_number: 1, air_date: dateOnly(daysFromNow(-3)), name: 'One' },
+          { episode_number: 2, air_date: dateOnly(daysFromNow(2)), name: 'Two' },
+        ],
+      },
+    },
+  });
+  await watch(app, 1, [[1, 1]], daysFromNow(-1));
+  const plain = (await app.api('GET', '/api/watched/shows/schedule')).body;
+  assert.deepEqual(plain.map(e => e.episodeNumber), [2]);
+  const fromEarlier = (await app.api('GET', `/api/watched/shows/schedule?from=${dateOnly(daysFromNow(-6))}`)).body;
+  assert.deepEqual(fromEarlier.map(e => e.episodeNumber), [1, 2]);
+  const junk = (await app.api('GET', '/api/watched/shows/schedule?from=yesterday')).body;
+  assert.deepEqual(junk.map(e => e.episodeNumber), [2]);
+});

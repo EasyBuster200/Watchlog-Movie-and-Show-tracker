@@ -975,7 +975,7 @@ button.settings-row:disabled { cursor: default; opacity: 0.5; background: none; 
    and the Android app (html.is-native, even on a big tablet) keep the phone layout above.
    media.js builds the browser shell (renderBrowserShell: TopNav, SiteFooter, breadcrumbs, row
    arrows) on every page with a bottom nav; it's hidden everywhere else. */
-.tt-topnav, .tt-footer, .tt-crumbs, .tt-arrows { display: none; }
+.tt-topnav, .tt-footer, .tt-crumbs, .tt-arrows, .web-only { display: none; }
 .auth__mosaic { display: none; }
 .auth__panel { width: 100%; flex: 1; display: flex; flex-direction: column; align-items: center; }
 .tt-sidenav__mark {
@@ -1054,7 +1054,7 @@ button.settings-row:disabled { cursor: default; opacity: 0.5; background: none; 
   /* Section titles: "See all" and the row arrows on the right. */
   html:not(.is-native) .has-shell .tt-section { justify-content: flex-start; align-items: center; gap: 16px; }
   html:not(.is-native) .has-shell .tt-section h2 { font-size: 22px; line-height: 30px; }
-  html:not(.is-native) .has-shell .tt-section > :nth-child(2) { margin-left: auto; }
+  html:not(.is-native) .has-shell .tt-section > h2 { margin-right: auto; }
   html:not(.is-native) .has-shell .tt-section > .tt-link { font-size: 14px; color: var(--text-secondary); }
   html:not(.is-native) .has-shell .tt-section > .tt-link:hover { color: var(--text-primary); }
   html:not(.is-native) .tt-arrows { display: flex; gap: 8px; }
@@ -1078,29 +1078,140 @@ button.settings-row:disabled { cursor: default; opacity: 0.5; background: none; 
   html:not(.is-native) .has-shell .poster-grid .tt-poster__title { font-size: 14px; line-height: 20px; }
   html:not(.is-native) .has-shell .poster-grid .tt-poster__meta { font-size: 12px; line-height: 17px; }
   html:not(.is-native) .has-shell .poster-grid .tt-toggle { width: 34px; height: 34px; }
-  html:not(.is-native) .has-shell .cast-row:not(.expanded) { flex-wrap: wrap; overflow: visible; row-gap: var(--space-4); }
-  html:not(.is-native) .has-shell .cast-row { margin: 0; padding: 0; }
-
-  /* Detail and actor pages: a taller hero, the head and body in the content column. */
-  html:not(.is-native) .has-shell .detail-hero { height: 340px; }
-  html:not(.is-native) .has-shell .detail-head { margin-top: -96px; padding: 0 max(40px, calc((100% - 1280px) / 2)); gap: 24px; }
-  html:not(.is-native) .has-shell .detail-head .tt-poster__art { width: 160px; }
-  html:not(.is-native) .has-shell .detail-head__info h1 { font-size: 32px; line-height: 40px; }
-  html:not(.is-native) .has-shell .detail-body { padding: 28px 40px 0; max-width: 1280px; margin: 0 auto; box-sizing: content-box; }
-
   /* Sheets and toasts sit over the content, centred. */
   html:not(.is-native) .tt-bh-layer .tt-sheet--bottom { left: 40px; right: 40px; max-width: 640px; margin: 0 auto; }
   html:not(.is-native) .sync-toast { bottom: 24px; }
 
-  /* Detail pages in a wide window: the main content and a side column with the cast, which
-     stack again below 1200px (about 900px of content). */
-  @media (min-width: 1200px) {
-    html:not(.is-native) .has-shell .detail-body {
-      display: grid; grid-template-columns: minmax(0, 1fr) 340px; column-gap: 48px; row-gap: var(--space-6); align-items: start;
-    }
-    html:not(.is-native) .has-shell .detail-body > * { grid-column: 1; min-width: 0; }
-    html:not(.is-native) .has-shell .detail-body > #cast-section { grid-column: 2; grid-row: 1 / span 8; }
+  /* ---------- Laptop pages: shared pieces (PR 2: Home and detail) ---------- */
+  html:not(.is-native) .has-shell .phone-only { display: none !important; }
+  html:not(.is-native) .has-shell .web-only { display: block; }
+  .web-wrap { width: 100%; max-width: 1360px; margin: 0 auto; padding: 0 40px; box-sizing: border-box; }
+  .screen:not(.screen--flush) .web-wrap { max-width: none; padding: 0; }
+  .web-eyebrow { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-text); }
+  .web-star { display: inline-flex; align-items: center; gap: 4px; color: var(--text-primary); font-weight: 500; }
+  .web-btn-lg { min-height: 48px; padding: 0 24px; font-size: 15px; text-decoration: none; }
+  .web-btn-lg.tt-btn--icon { width: 48px; padding: 0; }
+  a.web-btn-lg.tt-btn--primary, a.web-btn-lg.tt-btn--primary:hover { color: var(--on-accent); }
+  a.web-btn-lg.tt-btn--secondary, a.web-btn-lg.tt-btn--secondary:hover { color: var(--text-primary); }
+  html:not(.is-native) .has-shell .web-sec { display: flex; flex-direction: column; gap: 16px; }
+
+  /* Backdrop heroes (Home: "Up next for you"; detail pages): the image faded into the page
+     from the left and the bottom. */
+  html:not(.is-native) .has-shell .web-hero { position: relative; display: flex; align-items: flex-end; overflow: hidden; }
+  .web-hero--home { min-height: 460px; }
+  .web-hero--detail { min-height: 560px; }
+  .web-hero__bd {
+    position: absolute; inset: 0; background-size: cover; background-position: center 20%;
+    background-color: var(--bg-surface);
+    background-image: radial-gradient(120% 90% at 78% 20%, var(--bg-raised) 0%, var(--bg-surface) 45%, var(--bg-page) 75%);
   }
+  .web-hero__bd::after {
+    content: ""; position: absolute; inset: 0;
+    background:
+      linear-gradient(90deg, var(--bg-page) 0%, color-mix(in srgb, var(--bg-page) 85%, transparent) 38%, color-mix(in srgb, var(--bg-page) 20%, transparent) 70%, color-mix(in srgb, var(--bg-page) 35%, transparent) 100%),
+      linear-gradient(0deg, var(--bg-page) 0%, transparent 45%);
+  }
+  .web-hero__in { position: relative; padding-top: 72px; padding-bottom: 48px; }
+  .web-hero__in--detail { padding-top: 40px; padding-bottom: 40px; display: flex; flex-direction: column; gap: 40px; align-self: stretch; justify-content: space-between; }
+  .web-hero__row { display: flex; gap: 40px; align-items: flex-end; }
+  .web-hero__poster { flex-shrink: 0; width: 240px; }
+  .web-hero__poster .tt-poster__art { width: 240px; }
+  .web-hero__info { max-width: 560px; display: flex; flex-direction: column; gap: 14px; }
+  .web-hero__info--detail { flex: 1; min-width: 0; max-width: 680px; }
+  .web-hero__title { margin: 0; font-size: 48px; line-height: 56px; font-weight: 600; letter-spacing: -.01em; text-wrap: balance; }
+  .web-hero__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 14px; color: var(--text-secondary); }
+  .web-hero__strong { color: var(--text-primary); font-weight: 500; }
+  .web-hero__overview { margin: 0; font-size: 15px; line-height: 24px; color: var(--text-secondary); }
+  .web-hero--detail .web-hero__overview { font-size: 16px; line-height: 26px; }
+  .web-hero__progress { display: flex; align-items: center; gap: 16px; font-size: 13px; color: var(--text-secondary); }
+  .web-hero__bar { width: 220px; }
+  .web-hero__bar--wide { width: 260px; }
+  .web-hero__actions { display: flex; flex-wrap: wrap; gap: 12px; padding-top: 6px; }
+  .web-hero__actions .save-anchor { position: relative; }
+  .web-hero__actions .save-popover { left: 0; right: auto; top: calc(100% + 6px); bottom: auto; }
+
+  /* Home: Continue watching as LandscapeCards, four across; Airing this week, Mon-Sun. */
+  .web-land-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
+  .web-land-grid > .empty-note { grid-column: 1 / -1; }
+  .tt-land { display: flex; flex-direction: column; gap: 6px; min-width: 0; text-decoration: none; color: var(--text-primary); font-family: var(--font-sans); }
+  .tt-land__still { position: relative; display: block; aspect-ratio: 16 / 9; border-radius: var(--radius-md); overflow: hidden; background: var(--bg-raised); }
+  .tt-land__still img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .tt-land__still .tt-poster__ph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 28px; }
+  .tt-land__badge { position: absolute; top: 8px; left: 8px; padding: 2px 8px; border-radius: 999px; background: var(--scrim); font-size: 11px; font-weight: 600; color: var(--text-primary); }
+  .tt-land__play { position: absolute; right: 10px; bottom: 14px; width: 36px; height: 36px; border-radius: 999px; background: var(--accent); color: var(--on-accent); display: flex; align-items: center; justify-content: center; opacity: 0; transform: translateY(4px); transition: opacity 150ms ease-out, transform 150ms ease-out; }
+  .tt-land:hover .tt-land__play, .tt-land:focus-visible .tt-land__play { opacity: 1; transform: none; }
+  .tt-land__bar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(255,255,255,.18); }
+  .tt-land__bar > span { display: block; height: 100%; background: var(--accent-mark); }
+  .tt-land__title { font-size: 14px; font-weight: 600; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tt-land__meta { font-size: 12px; line-height: 17px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tt-land:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 3px; border-radius: var(--radius-md); }
+  .web-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 16px; }
+  .web-day { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+  .web-day__head { display: flex; align-items: baseline; gap: 6px; padding-bottom: 10px; border-bottom: 2px solid var(--border-subtle); }
+  .web-day__dow { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+  .web-day__date { font-size: 13px; color: var(--text-muted); }
+  .web-day--today .web-day__head { border-bottom-color: var(--accent-mark); }
+  .web-day--today .web-day__dow { color: var(--accent-text); }
+  .web-day__none { font-size: 12px; color: var(--text-muted); padding: 10px 0; }
+  .web-day__ep { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); text-decoration: none; color: var(--text-primary); }
+  .web-day__ep:hover { border-color: var(--border-strong); }
+  .web-day__ep:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+  .web-day__title { font-size: 13px; font-weight: 600; line-height: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .web-day__sub { font-size: 12px; color: var(--text-secondary); }
+  .web-day--today .web-day__sub { color: var(--accent-text); }
+
+  /* Detail: a main column (episodes) and a 320px sidebar (next episode, details). */
+  html:not(.is-native) .has-shell .web-detail { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 56px; align-items: start; margin-top: 32px; }
+  html:not(.is-native) .has-shell .web-detail--single { grid-template-columns: minmax(0, 1fr); }
+  .web-detail__main { min-width: 0; }
+  .web-detail__main:empty { display: none; }
+  .web-detail__aside { display: flex; flex-direction: column; gap: 20px; padding-top: 6px; }
+  .web-detail--single .web-dl { grid-template-columns: repeat(3, auto minmax(0, 1fr)); }
+  .web-card { padding: 20px; display: flex; flex-direction: column; gap: 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); }
+  .web-card__strong { font-size: 16px; font-weight: 600; }
+  .web-card__sub { font-size: 13px; color: var(--text-secondary); }
+  .web-card__title { margin: 0; font-size: 16px; font-weight: 600; }
+  .web-dl { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 16px; font-size: 14px; }
+  .web-dl dt { color: var(--text-secondary); }
+  .web-dl dd { margin: 0; }
+  .web-episodes { display: flex; flex-direction: column; }
+  .web-episodes > .tt-section { padding-bottom: 8px; }
+  .web-episodes__summary { font-size: 13px; color: var(--text-secondary); }
+  .web-tabs { display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid var(--border-subtle); }
+  .web-tab { position: relative; padding: 14px 12px; font-family: var(--font-sans); font-size: 14px; font-weight: 500; color: var(--text-secondary); background: none; border: 0; cursor: pointer; }
+  .web-tab:hover { color: var(--text-primary); }
+  .web-tab--on { color: var(--text-primary); }
+  .web-tab--on::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--accent-mark); }
+  .web-tab:focus-visible { outline: 2px solid var(--accent-text); outline-offset: -2px; border-radius: 6px; }
+  .web-tab__count { margin-left: 4px; font-weight: 400; color: var(--text-muted); }
+  .web-episodes__list { display: flex; flex-direction: column; margin-top: 8px; }
+  .web-episodes__list > .tt-eprow:first-child { border-top: 0; }
+  .tt-eprow { display: flex; align-items: flex-start; gap: 20px; padding: 16px 0; border-top: 1px solid var(--border-subtle); font-family: var(--font-sans); }
+  .tt-eprow__still { position: relative; flex: 0 0 200px; aspect-ratio: 16 / 9; border-radius: var(--radius-md); overflow: hidden; background: var(--bg-raised); }
+  .tt-eprow__still img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .tt-eprow__num { position: absolute; left: 8px; bottom: 8px; padding: 2px 8px; border-radius: 999px; background: var(--scrim); font-size: 12px; font-weight: 600; color: var(--text-primary); }
+  .tt-eprow__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .tt-eprow__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+  .tt-eprow__title { font-size: 16px; font-weight: 600; line-height: 22px; color: var(--text-primary); }
+  .tt-eprow__meta { font-size: 13px; color: var(--text-muted); }
+  .tt-eprow__text { margin: 0; max-width: 640px; font-size: 14px; line-height: 21px; color: var(--text-secondary); }
+  .tt-eprow__check { flex-shrink: 0; display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border: 1px solid var(--border-subtle); border-radius: 999px; background: transparent; color: var(--text-secondary); font-family: var(--font-sans); font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+  .tt-eprow__check:hover:not(:disabled) { border-color: var(--border-strong); color: var(--text-primary); }
+  .tt-eprow__check--on { background: var(--accent-subtle); border-color: var(--accent-mark); color: var(--accent-text); }
+  .tt-eprow__check:disabled { cursor: default; opacity: .6; }
+  .tt-eprow__check:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+
+  /* Below the columns: friends, the cast (eight across, paged by arrows), the collection and
+     More Like This, in the content column. */
+  html:not(.is-native) .has-shell .detail-body { padding: 56px 40px 0; max-width: 1280px; margin: 0 auto; box-sizing: content-box; gap: 56px; }
+  html:not(.is-native) .has-shell .cast-row {
+    display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 140px) / 8); gap: 20px;
+    overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; margin: 0; padding: 0;
+  }
+  html:not(.is-native) .has-shell .cast-row.expanded { grid-auto-flow: row; grid-template-columns: repeat(8, minmax(0, 1fr)); overflow: visible; row-gap: 24px; }
+  html:not(.is-native) .has-shell .cast-row > * { scroll-snap-align: start; min-width: 0; }
+  html:not(.is-native) .has-shell .cast-row .tt-cast { width: auto; }
+  html:not(.is-native) .has-shell .cast-row .tt-cast__photo { width: 100%; height: auto; aspect-ratio: 4 / 5; }
 
   /* Sign-in screens: the form on the right, a poster mosaic on the left. */
   html:not(.is-native) .auth { display: grid; grid-template-columns: minmax(0, 1fr) minmax(460px, 40%); align-items: stretch; padding: 0; }
