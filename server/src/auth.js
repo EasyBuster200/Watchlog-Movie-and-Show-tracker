@@ -180,6 +180,21 @@ export async function clientKey(request) {
   return (await sha256(`ip:${ip}`)).slice(0, 32);
 }
 
+// Per-minute burst limits (admin page part 2), on top of each route's hourly/daily limits:
+// every route anyone can call without signing in (sign-up, email codes, signing in, pairing,
+// recovery) shares one count per address, so a script hammering several of them at once is
+// slowed down within a minute instead of an hour.
+export const BURST_LIMITS = {
+  perClient: [20, 60],
+  accountsPerMinute: [10, 60],
+  emailsPerMinute: [20, 60],
+  friendRequestsPerMinute: [5, 60],
+};
+
+export async function burstLimit(env, request) {
+  await rateLimit(env, `burst:client:${await clientKey(request)}`, ...BURST_LIMITS.perClient);
+}
+
 export function cleanName(value, { max, fallback = null } = {}) {
   const text = typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
   if (!text) return fallback;

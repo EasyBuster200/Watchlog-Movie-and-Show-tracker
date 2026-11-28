@@ -198,8 +198,68 @@ function getSignupMode() {
 
 // Sign-up step 1: a 6-digit code to the email (roadmap Phase 3c). If the address already has an
 // account, the inbox gets a note saying so instead; the answer is the same either way.
-function requestSignupCode(email) {
-  return serverRequest('POST', '/v1/email-codes', { body: { email } });
+function requestSignupCode(email, turnstileToken = null) {
+  return serverRequest('POST', '/v1/email-codes', { body: { email, ...(turnstileToken ? { turnstileToken } : {}) } });
+}
+
+// ---------- The bot check (Cloudflare Turnstile, server/src/turnstile.js) ----------
+// Before an email code is sent, the server may ask for a Turnstile token. The widget runs on
+// the server's own page (turnstile.html) in a frame, since Turnstile needs a real domain and the
+// Android app's pages come from https://localhost; the frame posts the token back.
+
+let botCheckKeyPromise = null;
+
+// The site key, or null when the server doesn't check (or can't be reached: the request then
+// says what's wrong).
+function botCheckSiteKey() {
+  if (!botCheckKeyPromise) {
+    botCheckKeyPromise = serverRequest('GET', '/v1/turnstile')
+      .then(reply => (reply && reply.siteKey) || null)
+      .catch(() => { botCheckKeyPromise = null; return null; });
+  }
+  return botCheckKeyPromise;
+}
+
+const BOT_CHECK_TIMEOUT_MS = 3 * 60 * 1000;
+
+// Shows the check in `slot` and resolves its token (null when it's off). Usually it passes by
+// itself in a second or two; sometimes it asks for a tap. Each token works once, so the frame
+// is removed afterwards and the next send runs a fresh check.
+async function passBotCheck(slot) {
+  const siteKey = await botCheckSiteKey();
+  if (!siteKey) return null;
+  const base = serverBaseUrl();
+  const origin = new URL(base).origin;
+  const theme = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+  const frame = document.createElement('iframe');
+  frame.className = 'bot-check__frame';
+  frame.title = "Check that you're not a robot";
+  frame.src = `${base}/turnstile.html#sitekey=${encodeURIComponent(siteKey)}&theme=${theme}`;
+  const note = document.createElement('p');
+  note.className = 'bot-check__note';
+  note.textContent = "Checking that you're not a robot…";
+  slot.replaceChildren(note, frame);
+  slot.hidden = false;
+  return new Promise((resolve, reject) => {
+    const finish = (settle, value) => {
+      window.removeEventListener('message', onMessage);
+      clearTimeout(timer);
+      slot.replaceChildren();
+      slot.hidden = true;
+      settle(value);
+    };
+    const fail = () => finish(reject, new ServerError(0, 'bot_check_failed', "The check that you're not a robot didn't work. Check your connection and try again."));
+    function onMessage(event) {
+      if (event.origin !== origin || event.source !== frame.contentWindow) return;
+      const data = event.data || {};
+      if (data.source !== 'watchlog-turnstile') return;
+      if (data.height) frame.style.height = `${Math.max(65, data.height)}px`;
+      if (data.token) finish(resolve, data.token);
+      else if (data.error) fail();
+    }
+    const timer = setTimeout(fail, BOT_CHECK_TIMEOUT_MS);
+    window.addEventListener('message', onMessage);
+  });
 }
 
 // Step 2: the account, with the code from the email. `inviteCode` lets the person straight in;
@@ -364,8 +424,8 @@ function forgetRecovery(token) {
   saveRecoveries(pendingRecoveries().filter(r => r.token !== token));
 }
 
-function requestRecoveryCode(email) {
-  return serverRequest('POST', '/v1/recovery/code', { body: { email } });
+function requestRecoveryCode(email, turnstileToken = null) {
+  return serverRequest('POST', '/v1/recovery/code', { body: { email, ...(turnstileToken ? { turnstileToken } : {}) } });
 }
 
 async function startRecovery(email, code) {

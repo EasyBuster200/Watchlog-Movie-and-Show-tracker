@@ -15,7 +15,7 @@
 // Emails are plain text: nothing to render, and nothing for a mail app to block.
 
 import { ApiError } from './router.js';
-import { sha256, rateLimit, nowIso } from './auth.js';
+import { sha256, rateLimit, nowIso, BURST_LIMITS } from './auth.js';
 
 const RESEND_API = 'https://api.resend.com/emails';
 const DEFAULT_FROM = 'Watchlog <no-reply@watchlogtracker.com>';
@@ -51,6 +51,12 @@ export async function sendEmail(env, { to, subject, text }, { fetchImpl = fetch 
     await rateLimit(env, 'email:all', EMAIL_LIMITS.perDay, 24 * 60 * 60);
   } catch (error) {
     throw new ApiError(503, 'email_busy', 'Too many emails went out today. Try again tomorrow.');
+  }
+  // And per minute (burst limit), so a burst can't use up the day's emails at once.
+  try {
+    await rateLimit(env, 'email:all:minute', ...BURST_LIMITS.emailsPerMinute);
+  } catch (error) {
+    throw new ApiError(503, 'email_busy', 'Lots of emails are going out right now. Try again in a minute.', { retryAfter: (error.extra && error.extra.retryAfter) || 60 });
   }
   if (!env.RESEND_API_KEY) {
     console.log(`Email (not sent, EMAIL_DEV_LOG) to ${to}: ${subject}\n${text}`);
@@ -156,6 +162,49 @@ export function recoveryCancelledEmail() {
   return {
     subject: 'Recovery of your Watchlog account was cancelled',
     text: `A signed-in device cancelled the recovery of your Watchlog account. Your account key hasn't changed.${SIGN_OFF}`,
+  };
+}
+
+// The owner gave a locked-out account a new key from the admin page (decided with the user: it
+// goes to the account's own verified email, so the owner never sees anyone's key).
+export function adminNewKeyEmail(accountKey) {
+  return {
+    subject: 'Your new Watchlog account key',
+    text: `The owner of this Watchlog made a new account key for you:
+
+${accountKey}
+
+On the sign-in screen, choose Sign in and type it. Your old key no longer works, and every device was signed out. Your library is safe on the account.
+
+Save the key somewhere safe (a password manager is ideal), then delete this email.${SIGN_OFF}`,
+  };
+}
+
+// The answer to a join request (approval mode), so nobody waits without knowing.
+export function requestApprovedEmail(displayName) {
+  return {
+    subject: "You're in: your Watchlog account is ready",
+    text: `Hi ${displayName},
+
+The owner of this Watchlog approved your request. Open Watchlog (or https://watchlogtracker.com) and you're straight in; if it still says "Waiting for approval", tap Check again.${SIGN_OFF}`,
+  };
+}
+
+export function requestDeclinedEmail(displayName) {
+  return {
+    subject: 'Your Watchlog request',
+    text: `Hi ${displayName},
+
+Your request to join this Watchlog wasn't accepted, so the account it made was removed. If you think that's a mistake, ask the owner.${SIGN_OFF}`,
+  };
+}
+
+export function adminRecoveryCancelledEmail() {
+  return {
+    subject: 'Recovery of your Watchlog account was cancelled',
+    text: `The owner of this Watchlog cancelled the recovery of your Watchlog account. Your account key hasn't changed.
+
+If you started it and still can't get in, ask the owner.${SIGN_OFF}`,
   };
 }
 

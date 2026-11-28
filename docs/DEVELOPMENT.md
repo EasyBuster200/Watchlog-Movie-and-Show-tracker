@@ -392,10 +392,38 @@ The owner's **admin page** (`public/admin.html`, `admin.js`; roadmap Phase 8 par
   owner sees.
 - **Users:** approve, decline, sign out every device, suspend (signed out everywhere, can't sign
   in), unsuspend, delete. Admin accounts can't be changed from the page. The page shows counts,
-  never anyone's library.
+  never anyone's library. Approving or declining a request emails the person the answer
+  (`requestApprovedEmail`/`requestDeclinedEmail`, sent in the background after the change, so a
+  failed email doesn't undo it); deleting an account that was already in sends nothing.
 - **TMDB proxy:** an on/off switch and the daily cap (settings `tmdb_proxy`, `tmdb_daily_cap`),
   on top of the `TMDB_PROXY` var.
 - **Audit log:** every admin action, shown under Activity.
+- **Part 2: locked-out people** (an account's Manage dialog). **Email them a new key**
+  (`POST /v1/admin/users/:id/new-key`): a new account key goes to the account's own verified
+  email (decided with the user: the owner never sees it; the reply only says where it went,
+  `r•••@example.com`). The email is sent first, so a failed send changes nothing; then the old
+  key stops working, every device is signed out, and any recovery is cancelled. Up to 5 a day per
+  account. **Cancel their recovery** (`DELETE /v1/admin/users/:id/recovery`, offered while the
+  users list shows `recoveryUntil`): the person gets an email saying the owner cancelled it.
+- **Part 2: burst limits** (`auth.js`'s `BURST_LIMITS`), per minute on top of each route's own
+  hourly/daily limits: 20 requests per address shared by every route anyone can call without
+  signing in (`POST /v1/email-codes`, `/accounts`, `/sessions`, `/sessions/pair`, `/recovery/code`,
+  `/recovery`, `/recovery/complete`; `burstLimit`), 10 new accounts and 20 emails a minute in
+  all, and 5 friend requests a minute per account.
+- **Part 2: Turnstile** (`server/src/turnstile.js`): Cloudflare's bot check before the server
+  emails a code (`POST /v1/email-codes` and `/v1/recovery/code` take `turnstileToken`;
+  `bot_check_needed` 400, `bot_check_failed` 403, `bot_check_unavailable` 503). Creating the
+  account needs that emailed code, so it isn't checked again. On only when both
+  `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are set (`GET /v1/turnstile` → `{ siteKey }`, null
+  when off), so tests, `wrangler dev` and previews without them skip it. The widget runs on
+  `public/turnstile.html` (`scripts/turnstile-frame.js`), which the sign-in screens frame from the
+  server (`serverApi.js`'s `passBotCheck`, only when a code is about to be sent): Turnstile needs a
+  real domain name, and the Android app's pages come from `https://localhost`. The frame posts the
+  token only to its own origin and `https://localhost`; the screen checks the message's origin and
+  source. The Android app allows third-party cookies in its WebView for it (`MainActivity`, as
+  Cloudflare asks). Locally, Cloudflare's test keys (site `1x00000000000000000000AA`, secret
+  `1x0000000000000000000000000000000AA`; `2x00000000000000000000AB` always fails) work in
+  `.dev.vars`.
 - **The owner hears about requests:** each sync reply for the admin carries
   `admin: { pendingRequests }`, which the app shows as a "N people want to join" banner on any
   device. On top of that a Web Push notification goes to every device where the owner switched
@@ -411,7 +439,11 @@ Secrets, Production tab, type Secret):**
 
 1. Create your own online account on the live site first (the first account gets in without
    approval). Open `/admin.html`: it shows your account id. Add it as `ADMIN_ACCOUNT_IDS`.
-2. For push notifications: run `node tools/make-vapid-keys.mjs` and add the two keys it prints
+2. For the bot check: Cloudflare dashboard → Turnstile → Add widget: name "Watchlog", hostname
+   `watchlogtracker.com`, mode Managed. Add its site key as `TURNSTILE_SITE_KEY` and its secret
+   key as `TURNSTILE_SECRET_KEY` (both as secrets, Production tab only, so deploys keep them and
+   previews skip the check). Without both, nothing is checked.
+3. For push notifications: run `node tools/make-vapid-keys.mjs` and add the two keys it prints
    as `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`. Keep them in a password manager: new keys
    break every existing subscription. Optionally `VAPID_SUBJECT` (an `https://` or `mailto:`
    contact address for push services; the repository's address by default).

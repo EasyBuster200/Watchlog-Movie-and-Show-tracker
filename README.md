@@ -187,8 +187,12 @@ every device you sign in on (phone, tablet, laptop), and you **don't need a TMDB
   device is signed out.
 - Your email is only used for this and for notices about your account. Change it in
   **Settings → Email**.
-- Without an invite, you see **Waiting for approval** until the owner lets you in. Tap **Check
-  again** any time.
+- Sending a code may show a short **"Checking that you're not a robot…"** step first. It usually
+  passes by itself; sometimes it asks you to tap a box.
+- If even that fails, ask the owner of this Watchlog: they can **email you a new key** (to your
+  account's email; they never see it).
+- Without an invite, you see **Waiting for approval** until the owner lets you in. You get an
+  email with the answer either way; tap **Check again** any time.
 - To add another device: on a signed-in one, go to **Settings → Add a device** and enter the code
   it shows on the new one (or sign in there with your key).
 - An existing offline profile can become an online account in **Settings → Make this an online

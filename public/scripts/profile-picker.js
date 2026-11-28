@@ -577,6 +577,8 @@ async function renderCreate({ upgrade = null, values = null } = {}) {
   if (values && inviteField) inviteField.input.value = values.inviteCode || '';
   const submit = button('Continue', 'primary', null, { type: 'submit' });
   form.appendChild(submit);
+  const botSlot = botCheckSlot();
+  form.appendChild(botSlot);
   form.appendChild(el('p', 'auth__fine', "After the code, you'll get an account key: a long code that signs you in on any device. Keep it somewhere safe."));
   form.addEventListener('submit', async event => {
     event.preventDefault();
@@ -590,7 +592,7 @@ async function renderCreate({ upgrade = null, values = null } = {}) {
     error.show('');
     submit.disabled = true;
     try {
-      await requestSignupCode(email);
+      await requestSignupCode(email, await passBotCheck(botSlot));
       show('create-code', {
         upgrade: upgrading ? upgrading.id : null,
         form: { mode, displayName, email, inviteCode: inviteCode || null, note: noteField ? noteField.input.value.trim() : null },
@@ -748,6 +750,13 @@ function emailLooksValid(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
 }
 
+// Where the bot check (serverApi.js's passBotCheck) appears while an email code is being sent.
+function botCheckSlot() {
+  const slot = el('div', 'bot-check');
+  slot.hidden = true;
+  return slot;
+}
+
 function codeField(label) {
   const field = buildTextField({ label, icon: 'lock', placeholder: '123456', autocomplete: 'one-time-code', maxLength: 6, inputMode: 'numeric' });
   field.input.spellcheck = false;
@@ -769,6 +778,8 @@ function renderRecover({ email = '' } = {}) {
   form.appendChild(error);
   const submit = button('Send code', 'primary', null, { type: 'submit' });
   form.appendChild(submit);
+  const botSlot = botCheckSlot();
+  form.appendChild(botSlot);
   form.addEventListener('submit', async event => {
     event.preventDefault();
     const value = emailField.input.value.trim();
@@ -777,7 +788,7 @@ function renderRecover({ email = '' } = {}) {
     error.show('');
     submit.disabled = true;
     try {
-      await requestRecoveryCode(value);
+      await requestRecoveryCode(value, await passBotCheck(botSlot));
       show('inbox', { email: value });
     } catch (err) {
       error.show(err.message || 'Something went wrong. Try again.');
@@ -910,14 +921,17 @@ function renderCreateCode({ form: fields, upgrade = null }) {
     }
   });
   authEl.appendChild(form);
+  const resendSlot = botCheckSlot();
   authEl.appendChild(promptLine("Didn't get it? Check spam, or", 'send it again', async () => {
     try {
-      await requestSignupCode(fields.email);
+      error.show('');
+      await requestSignupCode(fields.email, await passBotCheck(resendSlot));
       error.show('Sent again.');
     } catch (err) {
       error.show(err.message || "Couldn't send it. Try again.");
     }
   }));
+  authEl.appendChild(resendSlot);
 }
 
 const SCREENS = {

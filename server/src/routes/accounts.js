@@ -12,10 +12,11 @@
 // (POST /account/email-code, then PUT /account/email). Recovery with it is in recovery.js.
 
 import { route, json, noContent, readJson, ApiError } from '../router.js';
+import { verifyTurnstile, turnstileSiteKey } from '../turnstile.js';
 import {
   generateAccountKey, accountKeyData, hashAccountKey,
   generatePairingCode, pairingCodeData, hashPairingCode, hashInviteCode, PAIRING_CODE_MINUTES,
-  createSession, requireAuth, rateLimit, clientKey, cleanName, nowIso,
+  createSession, requireAuth, rateLimit, clientKey, cleanName, nowIso, burstLimit, BURST_LIMITS,
 } from '../auth.js';
 import { getSettings } from '../settings.js';
 import { isAdmin, adminIds } from '../admin.js';
@@ -118,13 +119,18 @@ route('GET', '/signup', async ({ env }) => {
   return json(await signupMode(env));
 });
 
+// The bot check's public site key (turnstile.js), or null when it's off.
+route('GET', '/turnstile', async ({ env }) => json({ siteKey: turnstileSiteKey(env) }));
+
 // Sign-up step 1: a code to the address. If it already belongs to an account, that address gets
 // a note saying so instead, and the answer is the same (so nobody learns who has an account).
 route('POST', '/email-codes', async ({ request, env }) => {
+  await burstLimit(env, request);
   const body = await readJson(request);
   const email = normalizeEmail(body.email);
   if (!email) throw INVALID_EMAIL();
   if (body.purpose !== undefined && body.purpose !== 'signup') throw new ApiError(400, 'invalid_purpose', 'Unknown code purpose.');
+  await verifyTurnstile(env, request, body.turnstileToken);
   await limited(env, `email-code:client:${await clientKey(request)}`, LIMITS.emailCodesPerClient);
   await limited(env, `email-code:address:${await hashEmail(email)}`, LIMITS.emailCodesPerAddress);
   if (await accountIdByEmail(env, email)) {
@@ -139,12 +145,14 @@ route('POST', '/email-codes', async ({ request, env }) => {
 // Create an account (or, in 'approval' mode without an invite, ask to join). Returns its account
 // key, the only time the server ever sends it.
 route('POST', '/accounts', async ({ request, env, ctx }) => {
+  await burstLimit(env, request);
   const body = await readJson(request);
   const displayName = cleanName(body.displayName, { max: NAME_MAX });
   if (!displayName) throw new ApiError(400, 'name_required', 'Enter a name for the account.');
   const client = await clientKey(request);
   await limited(env, `create-account:client:${client}`, LIMITS.createAccountPerClient);
   await limited(env, 'create-account:all', LIMITS.createAccountTotal);
+  await limited(env, 'create-account:all:minute', BURST_LIMITS.accountsPerMinute);
 
   const now = nowIso();
   const { mode } = await signupMode(env);
@@ -201,6 +209,7 @@ route('POST', '/accounts', async ({ request, env, ctx }) => {
 
 // Sign a device in with the account key.
 route('POST', '/sessions', async ({ request, env }) => {
+  await burstLimit(env, request);
   const body = await readJson(request);
   await limited(env, `sign-in:client:${await clientKey(request)}`, LIMITS.signInPerClient);
   const data = accountKeyData(body.accountKey);
@@ -213,6 +222,7 @@ route('POST', '/sessions', async ({ request, env }) => {
 
 // Sign a device in with a one-time pairing code from a signed-in device.
 route('POST', '/sessions/pair', async ({ request, env }) => {
+  await burstLimit(env, request);
   const body = await readJson(request);
   await limited(env, `pair:client:${await clientKey(request)}`, LIMITS.pairPerClient);
   const code = pairingCodeData(body.code);

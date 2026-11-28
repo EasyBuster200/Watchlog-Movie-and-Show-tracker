@@ -4,11 +4,13 @@
 //
 //   GET    /v1/admin/overview               counts, settings, today's TMDB use, the last backup
 //   GET    /v1/admin/users                  every account, sign-up requests first
-//   POST   /v1/admin/users/:id/approve      a request becomes an account
+//   POST   /v1/admin/users/:id/approve      a request becomes an account (they're emailed)
 //   POST   /v1/admin/users/:id/suspend      signed out everywhere, can't sign in
 //   POST   /v1/admin/users/:id/unsuspend
 //   POST   /v1/admin/users/:id/sign-out     signs out all its devices
-//   DELETE /v1/admin/users/:id              deletes it (also how a request is declined)
+//   POST   /v1/admin/users/:id/new-key      a new account key, emailed to them (part 2)
+//   DELETE /v1/admin/users/:id/recovery     cancels a recovery in progress (part 2)
+//   DELETE /v1/admin/users/:id              deletes it (also how a request is declined; emailed)
 //   GET    /v1/admin/invites                POST { note, days } -> { invite, code }
 //   DELETE /v1/admin/invites/:id            an unused one
 //   GET    /v1/admin/settings               PATCH { signupMode, tmdbProxy, tmdbDailyCap }
@@ -18,7 +20,13 @@
 // can't lock themself out by a mis-tap).
 
 import { route, json, noContent, readJson, ApiError } from '../router.js';
-import { generatePairingCode, pairingCodeData, hashInviteCode, nowIso, cleanName } from '../auth.js';
+import {
+  generatePairingCode, pairingCodeData, hashInviteCode, nowIso, cleanName,
+  generateAccountKey, accountKeyData, hashAccountKey, rateLimit,
+} from '../auth.js';
+import {
+  sendEmail, sendNotice, emailConfigured, adminNewKeyEmail, adminRecoveryCancelledEmail, requestApprovedEmail, requestDeclinedEmail,
+} from '../email.js';
 import { requireAdmin, isAdmin, adminIds, audit } from '../admin.js';
 import { getSettings, updateSettings } from '../settings.js';
 import { pushConfigured } from '../push.js';
@@ -82,7 +90,8 @@ route('GET', '/admin/users', async ({ request, env }) => {
             (SELECT MAX(last_used_at) FROM sessions s WHERE s.account_id = a.id) AS lastSeen,
             (SELECT COUNT(*) FROM sessions s WHERE s.account_id = a.id AND s.expires_at > ?) AS devices,
             (SELECT COUNT(*) FROM sync_records r WHERE r.account_id = a.id AND r.deleted = 0) AS records,
-            (SELECT count FROM rate_limits l WHERE l.key = 'tmdb:account:' || a.id AND l.window_start = ?) AS tmdbToday
+            (SELECT count FROM rate_limits l WHERE l.key = 'tmdb:account:' || a.id AND l.window_start = ?) AS tmdbToday,
+            (SELECT completes_at FROM recoveries r WHERE r.account_id = a.id) AS recoveryUntil
        FROM accounts a
       ORDER BY a.status = 'pending' DESC, a.created_at DESC
       LIMIT 1000`
@@ -91,18 +100,28 @@ route('GET', '/admin/users', async ({ request, env }) => {
 });
 
 async function targetAccount(env, id) {
-  const row = await env.DB.prepare('SELECT id, display_name AS displayName, status FROM accounts WHERE id = ?').bind(id).first();
+  const row = await env.DB.prepare('SELECT id, display_name AS displayName, status, email FROM accounts WHERE id = ?').bind(id).first();
   if (!row) throw new ApiError(404, 'not_found', 'There is no such account.');
   if (isAdmin(env, row.id)) throw new ApiError(400, 'is_admin', "That's an admin account; change it in ADMIN_ACCOUNT_IDS first.");
   return row;
 }
 
-route('POST', '/admin/users/:id/approve', async ({ request, env, params }) => {
+// The person who asked hears the answer by email (approved or declined), sent after the change
+// and in the background: a failed email doesn't undo it (sendNotice only logs).
+function tellRequester(ctx, env, email, message) {
+  if (!email) return undefined;
+  const notice = sendNotice(env, { to: email, ...message });
+  if (ctx && ctx.waitUntil) ctx.waitUntil(notice);
+  return notice;
+}
+
+route('POST', '/admin/users/:id/approve', async ({ request, env, params, ctx }) => {
   const { account: admin } = await requireAdmin(request, env);
   const target = await targetAccount(env, params.id);
   if (target.status !== 'pending') throw new ApiError(400, 'not_pending', 'That account is not waiting for approval.');
   await env.DB.prepare("UPDATE accounts SET status = 'active' WHERE id = ?").bind(target.id).run();
   await audit(env, admin.id, 'approve', target.id, { name: target.displayName });
+  tellRequester(ctx, env, target.email, requestApprovedEmail(target.displayName));
   return json({ ok: true });
 });
 
@@ -135,11 +154,58 @@ route('POST', '/admin/users/:id/sign-out', async ({ request, env, params }) => {
   return json({ ok: true });
 });
 
-route('DELETE', '/admin/users/:id', async ({ request, env, params }) => {
+// Someone who lost their key and can't use "Lost your key?" (decided with the user: the key is
+// emailed to the account's own address, never shown here). The email goes first, so a failed
+// send changes nothing; then every device is signed out and any recovery is cancelled.
+export const ADMIN_NEW_KEYS_PER_ACCOUNT = [5, 24 * 3600];
+
+route('POST', '/admin/users/:id/new-key', async ({ request, env, params }) => {
+  const { account: admin } = await requireAdmin(request, env);
+  const target = await targetAccount(env, params.id);
+  if (target.status === 'pending') throw new ApiError(400, 'is_pending', 'Approve the request first.');
+  if (!target.email) throw new ApiError(400, 'no_email', 'That account has no email address to send a key to.');
+  if (!emailConfigured(env)) throw new ApiError(503, 'email_unavailable', "Email isn't set up on this server, so the key can't be sent.");
+  await rateLimit(env, `admin-new-key:account:${target.id}`, ...ADMIN_NEW_KEYS_PER_ACCOUNT);
+  const accountKey = generateAccountKey();
+  await sendEmail(env, { to: target.email, ...adminNewKeyEmail(accountKey) });
+  const now = nowIso();
+  await env.DB.batch([
+    env.DB.prepare('UPDATE accounts SET key_hash = ?, key_changed_at = ? WHERE id = ?').bind(await hashAccountKey(accountKeyData(accountKey)), now, target.id),
+    env.DB.prepare('DELETE FROM sessions WHERE account_id = ?').bind(target.id),
+    env.DB.prepare('DELETE FROM pairing_codes WHERE account_id = ?').bind(target.id),
+    env.DB.prepare('DELETE FROM recoveries WHERE account_id = ?').bind(target.id),
+  ]);
+  await audit(env, admin.id, 'new-key', target.id, { name: target.displayName });
+  return json({ ok: true, sentTo: maskEmail(target.email) });
+});
+
+route('DELETE', '/admin/users/:id/recovery', async ({ request, env, params, ctx }) => {
+  const { account: admin } = await requireAdmin(request, env);
+  const target = await targetAccount(env, params.id);
+  const result = await env.DB.prepare('DELETE FROM recoveries WHERE account_id = ?').bind(target.id).run();
+  if (!(result.meta && result.meta.changes)) throw new ApiError(404, 'no_recovery', 'That account has no recovery in progress.');
+  if (target.email) {
+    const notice = sendNotice(env, { to: target.email, ...adminRecoveryCancelledEmail() });
+    if (ctx && ctx.waitUntil) ctx.waitUntil(notice); else await notice;
+  }
+  await audit(env, admin.id, 'recovery.cancel', target.id, { name: target.displayName });
+  return noContent();
+});
+
+// "a•••@example.com": enough for the owner to tell the person where to look.
+export function maskEmail(email) {
+  const [local, domain] = String(email).split('@');
+  return domain ? `${local.slice(0, 1)}•••@${domain}` : '•••';
+}
+
+route('DELETE', '/admin/users/:id', async ({ request, env, params, ctx }) => {
   const { account: admin } = await requireAdmin(request, env);
   const target = await targetAccount(env, params.id);
   await env.DB.prepare('DELETE FROM accounts WHERE id = ?').bind(target.id).run();
-  await audit(env, admin.id, target.status === 'pending' ? 'decline' : 'delete', target.id, { name: target.displayName });
+  const declined = target.status === 'pending';
+  await audit(env, admin.id, declined ? 'decline' : 'delete', target.id, { name: target.displayName });
+  // Only a declined request gets an email; deleting an existing account is the owner's business.
+  if (declined) tellRequester(ctx, env, target.email, requestDeclinedEmail(target.displayName));
   return noContent();
 });
 
