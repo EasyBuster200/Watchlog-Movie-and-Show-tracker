@@ -766,8 +766,8 @@ a.friend-row:hover { background: var(--bg-raised); }
 .detail-friends__chevron { flex-shrink: 0; color: var(--text-secondary); display: flex; transition: transform 0.15s; }
 .detail-friends__summary[aria-expanded="true"] .detail-friends__chevron { transform: rotate(90deg); }
 .activity-row__when { font-size: 12px; }
-.profile-friends { text-decoration: none; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); }
-.profile-friends:hover { background: var(--bg-raised); }
+.profile-friends, .settings-row.profile-friends { text-decoration: none; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); }
+.profile-friends:hover, .settings-row.profile-friends:hover { background: var(--bg-raised); }
 
 /* Settings → Import data: how to load the backup (settings.js importChoiceDialog). */
 .import-choices { display: flex; flex-direction: column; gap: var(--space-2); margin: var(--space-4) 0; }
@@ -898,7 +898,20 @@ a.friend-row:hover { background: var(--bg-raised); }
 }
 button.settings-row { cursor: pointer; }
 button.settings-row:hover { background: var(--bg-raised); }
-button.settings-row:disabled { cursor: default; opacity: 0.5; background: none; }
+button.settings-row:disabled { cursor: default; opacity: 0.55; background: none; }
+.settings-row--disabled { opacity: 0.55; }
+.settings-row--disabled .tt-switch:disabled { opacity: 1; }
+.settings-row__btn {
+  flex-shrink: 0; white-space: nowrap; min-height: 32px; padding: 0 12px; border-radius: var(--radius-pill);
+  border: 1px solid var(--border-subtle); background: transparent; color: var(--text-primary);
+  font-family: var(--font-sans); font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.settings-row__btn:hover { border-color: var(--border-strong); }
+.settings-row__btn:disabled { cursor: default; }
+.settings-row__btn:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+.settings-row--danger .settings-row__btn { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+.settings-section__title { margin: 0; }
+.settings-layout, .settings-main { display: contents; }
 .settings-row + .settings-row { border-top: 1px solid var(--border-subtle); }
 .settings-row__text { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .settings-row__label { font-size: 14px; font-weight: 500; }
@@ -946,9 +959,27 @@ button.settings-row:disabled { cursor: default; opacity: 0.5; background: none; 
 .admin__body { gap: var(--space-6); }
 .admin-row { align-items: center; }
 .admin-row__actions { display: flex; flex-shrink: 0; gap: var(--space-2); }
-.admin-btn { min-height: 36px; padding: 6px 12px; font-size: 13px; }
+.admin-btn {
+  flex-shrink: 0; white-space: nowrap; min-height: 36px; padding: 0 14px; border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle); background: transparent; color: var(--text-primary);
+  font-family: var(--font-sans); font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.admin-btn:hover { border-color: var(--border-strong); }
+.admin-btn:disabled { opacity: 0.55; cursor: default; }
+.admin-btn:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+.admin-btn--primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.admin-btn--primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.admin-btn--danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+.admin-section__head { display: flex; align-items: center; gap: 12px; }
+.admin-request { flex-wrap: wrap; padding: 14px; }
+.admin-request .settings-row__text { flex: 1 1 160px; }
+.admin-row--quiet .settings-row__label { color: var(--text-secondary); font-weight: 400; }
+.admin-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.admin-mode-text { margin: 0; font-size: 13px; }
+.admin-user + .admin-user, .settings-row + .admin-user, .admin-user + .settings-row { border-top: 1px solid var(--border-subtle); }
+.admin-user__actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 14px 14px; }
 .admin-note { margin: var(--space-2) 0 0; }
-.admin-message { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-5); }
+.admin-message { display: flex; flex-direction: column; gap: var(--space-3); padding: 20px; }
 .admin-message h2 { margin: 0; font-size: 18px; }
 .admin-message p { margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 20px; }
 .admin-id { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; padding: var(--space-2) var(--space-3); background: var(--bg-raised); border-radius: var(--radius-sm); overflow-wrap: anywhere; }
@@ -976,6 +1007,23 @@ button.settings-row:disabled { cursor: default; opacity: 0.5; background: none; 
    media.js builds the browser shell (renderBrowserShell: TopNav, SiteFooter, breadcrumbs, row
    arrows) on every page with a bottom nav; it's hidden everywhere else. */
 .tt-topnav, .tt-footer, .tt-crumbs, .tt-arrows, .web-only { display: none; }
+
+/* Design-system pieces used by Settings and Admin (bundle.css: Badge, StatusPill, OptionCard). */
+.tt-badge { flex-shrink: 0; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: var(--radius-pill); background: var(--accent); color: var(--on-accent); font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
+.tt-pill { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: var(--radius-pill); font-family: var(--font-sans); font-size: 12px; font-weight: 500; white-space: nowrap; }
+.tt-pill--success { background: color-mix(in srgb, var(--success) 16%, transparent); color: var(--success); }
+.tt-pill--danger { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+.tt-pill--warning { background: color-mix(in srgb, var(--rating) 18%, transparent); color: var(--rating); }
+.tt-pill--neutral { background: var(--bg-raised); color: var(--text-secondary); }
+.tt-option { display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 12px 14px; box-sizing: border-box; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); background: transparent; text-align: left; cursor: pointer; font-family: var(--font-sans); color: var(--text-primary); }
+.tt-option:hover { border-color: var(--border-strong); }
+.tt-option--on { border-color: var(--accent-mark); background: var(--accent-subtle); }
+.tt-option__dot { width: 16px; height: 16px; flex-shrink: 0; margin-top: 2px; border-radius: 999px; border: 1.5px solid var(--border-strong); box-sizing: border-box; }
+.tt-option--on .tt-option__dot { border: 5px solid var(--accent-mark); }
+.tt-option__text { display: flex; flex-direction: column; gap: 2px; }
+.tt-option__label { font-size: 14px; font-weight: 600; }
+.tt-option__desc { font-size: 12px; line-height: 17px; color: var(--text-secondary); }
+.tt-option:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
 .auth__mosaic { display: none; }
 .auth__panel { width: 100%; flex: 1; display: flex; flex-direction: column; align-items: center; }
 .tt-sidenav__mark {
@@ -1283,4 +1331,117 @@ button.settings-row:disabled { cursor: default; opacity: 0.5; background: none; 
   .auth__mosaic-tile img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0.85; }
   html:not(.is-native) .auth__panel { justify-content: center; padding: 48px 40px 32px; min-height: 100vh; box-sizing: border-box; }
   html:not(.is-native) .auth__col { flex: 0 0 auto; }
+
+  /* ---------- Laptop Settings (PR 4: the design's WebSettings) ---------- */
+  html:not(.is-native) .settings-screen .tt-crumbs { margin-bottom: -16px; }
+  html:not(.is-native) .settings-screen .screen-title { font-size: 36px; line-height: 44px; }
+  html:not(.is-native) .settings-screen .app-version { text-align: left; }
+  html:not(.is-native) .has-shell .settings-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 56px; align-items: start; padding-top: 4px; }
+  html:not(.is-native) .has-shell .settings-main { display: flex; flex-direction: column; gap: 40px; max-width: 800px; min-width: 0; }
+  html:not(.is-native) .has-shell .settings-nav.web-only { display: flex; flex-direction: column; gap: 2px; position: sticky; top: 96px; }
+  html:not(.is-native) .settings-nav a { display: flex; align-items: center; padding: 8px 12px; border-radius: var(--radius-md); font-size: 14px; font-weight: 500; color: var(--text-secondary); text-decoration: none; }
+  html:not(.is-native) .settings-nav a:hover { background: var(--bg-card); color: var(--text-primary); }
+  html:not(.is-native) .settings-nav a.is-on { background: var(--accent-subtle); color: var(--accent-text); }
+  html:not(.is-native) .settings-nav a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+  html:not(.is-native) .settings-section { gap: 12px; scroll-margin-top: 96px; }
+  html:not(.is-native) .settings-section__title.tt-filter-label { font-size: 18px; line-height: 26px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--text-primary); }
+  html:not(.is-native) .settings-row { min-height: 64px; padding: 12px 20px; gap: 24px; }
+  html:not(.is-native) .settings-row__sub { font-size: 13px; line-height: 19px; }
+  html:not(.is-native) .settings-row__value { font-size: 14px; white-space: nowrap; }
+  html:not(.is-native) .settings-row__btn { min-height: 36px; padding: 0 16px; border-radius: var(--radius-md); font-size: 13px; }
+  html:not(.is-native) .settings-block { flex-direction: row; align-items: center; gap: 24px; min-height: 72px; padding: 12px 20px; box-sizing: border-box; }
+  html:not(.is-native) .settings-block__head { flex: 1; min-width: 0; flex-direction: column; justify-content: flex-start; align-items: flex-start; gap: 2px; }
+  html:not(.is-native) .settings-block__head .muted-note { font-size: 13px; line-height: 19px; color: var(--text-secondary); }
+  html:not(.is-native) .settings-seg { background: var(--bg-page); }
+  html:not(.is-native) .swatches { flex-wrap: nowrap; gap: 6px; }
+  html:not(.is-native) .swatch { width: 36px; height: 36px; }
+  html:not(.is-native) .swatch__dot { width: 26px; height: 26px; }
+  html:not(.is-native) .swatch__dot .tt-icon { display: none; }
+  html:not(.is-native) .has-shell .settings-webprofile { display: flex; align-items: center; gap: 20px; padding: 20px; }
+  html:not(.is-native) .settings-webprofile__avatar { width: 64px; height: 64px; flex-shrink: 0; border-radius: var(--radius-pill); background: var(--accent); color: var(--on-accent); display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 600; }
+  html:not(.is-native) .settings-webprofile__name { font-size: 20px; font-weight: 600; }
+  html:not(.is-native) .has-shell section.settings-section.web-only { display: flex; }
+
+  /* ---------- Laptop Profile (PR 4: the design's WebProfile) ---------- */
+  html:not(.is-native) body.has-shell { overflow-x: clip; }
+  html:not(.is-native) .has-shell .web-profile.web-only {
+    display: block; margin: -32px calc(50% - 50vw) 0; padding: 40px calc(50vw - 50%) 0;
+    background: var(--bg-surface); border-bottom: 1px solid var(--border-subtle);
+  }
+  html:not(.is-native) .web-profile__in { display: flex; flex-direction: column; gap: 28px; }
+  html:not(.is-native) .web-profile__head { display: flex; align-items: center; gap: 24px; }
+  html:not(.is-native) .web-profile__avatar { width: 96px; height: 96px; flex-shrink: 0; border-radius: var(--radius-pill); background: var(--accent); color: var(--on-accent); display: flex; align-items: center; justify-content: center; font-size: 38px; font-weight: 600; }
+  html:not(.is-native) .web-profile__titles { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  html:not(.is-native) .web-profile__name { margin: 0; font-size: 32px; line-height: 40px; font-weight: 600; }
+  html:not(.is-native) .web-profile__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; color: var(--text-secondary); }
+  html:not(.is-native) .web-profile__backup { display: inline-flex; align-items: center; gap: 8px; }
+  html:not(.is-native) .web-profile__dot { color: var(--text-muted); }
+  html:not(.is-native) .web-profile__backup-icon { display: inline-flex; color: var(--success); }
+  html:not(.is-native) .web-profile__backup.is-warning .web-profile__backup-icon { color: var(--danger); }
+  html:not(.is-native) .web-profile__actions { margin-left: auto; display: flex; gap: 12px; }
+  html:not(.is-native) .web-profile__actions a.tt-btn { text-decoration: none; color: var(--text-primary); }
+  html:not(.is-native) .web-profile__stats { display: flex; margin-left: -28px; }
+  html:not(.is-native) .web-profile__stat { display: flex; flex-direction: column; gap: 2px; padding: 0 28px; font-size: 13px; color: var(--text-secondary); }
+  html:not(.is-native) .web-profile__stat + .web-profile__stat { border-left: 1px solid var(--border-subtle); }
+  html:not(.is-native) .web-profile__stat-value { font-size: 26px; line-height: 34px; font-weight: 600; color: var(--text-primary); }
+  html:not(.is-native) .web-profile__tabs { display: flex; gap: 8px; }
+  html:not(.is-native) .web-profile__tab { position: relative; padding: 14px 12px; font-size: 14px; font-weight: 500; color: var(--text-secondary); text-decoration: none; }
+  html:not(.is-native) .web-profile__tab:hover { color: var(--text-primary); }
+  html:not(.is-native) .web-profile__tab--on { color: var(--text-primary); }
+  html:not(.is-native) .web-profile__tab--on::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--accent-mark); }
+  html:not(.is-native) .web-profile__tab:focus-visible { outline: 2px solid var(--accent-text); outline-offset: -2px; border-radius: 6px; }
+  html:not(.is-native) .has-shell .web-profile__charts.web-only { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 24px; margin-top: 8px; }
+  html:not(.is-native) .web-profile__card { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 24px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  html:not(.is-native) .web-profile__card h2 { margin: 0; font-size: 18px; font-weight: 600; }
+  html:not(.is-native) .web-profile__card-head { display: flex; justify-content: space-between; align-items: baseline; }
+  html:not(.is-native) .web-profile__card-head span { font-size: 12px; color: var(--text-secondary); }
+  html:not(.is-native) .web-month-chart { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; align-items: end; min-height: 220px; }
+  html:not(.is-native) .web-month-chart > .muted-note { grid-column: 1 / -1; align-self: center; }
+  html:not(.is-native) .web-month { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; height: 220px; }
+  html:not(.is-native) .web-month__value, html:not(.is-native) .web-month__label { font-size: 11px; color: var(--text-secondary); }
+  html:not(.is-native) .web-month__label { color: var(--text-muted); }
+  html:not(.is-native) .web-month__fill { width: 100%; min-height: 2px; border-radius: 6px 6px 2px 2px; background: var(--accent-mark); }
+  html:not(.is-native) .web-month--current .web-month__fill { background: var(--accent-text); }
+  html:not(.is-native) .web-genres { display: flex; flex-direction: column; gap: 16px; }
+  html:not(.is-native) .web-genre { display: grid; grid-template-columns: 84px 1fr 28px; align-items: center; gap: 12px; }
+  html:not(.is-native) .web-genre__name { font-size: 13px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  html:not(.is-native) .web-genre__track { height: 8px; border-radius: var(--radius-pill); background: var(--bg-raised); }
+  html:not(.is-native) .web-genre__fill { height: 8px; border-radius: var(--radius-pill); background: var(--accent-mark); }
+  html:not(.is-native) .web-genre__count { font-size: 13px; font-weight: 600; text-align: right; }
+
+  /* ---------- Laptop Admin (PR 4: the design's WebAdmin) ---------- */
+  html:not(.is-native) .admin .tt-crumbs { margin-bottom: -16px; }
+  html:not(.is-native) .admin .screen-title { font-size: 36px; line-height: 44px; }
+  html:not(.is-native) .has-shell .admin__lede.web-only { margin: -16px 0 0; font-size: 14px; line-height: 20px; color: var(--text-secondary); }
+  html:not(.is-native) .has-shell .admin__body { gap: 32px; padding-top: 8px; }
+  html:not(.is-native) .admin-glance { display: flex; flex-direction: column; gap: 12px; }
+  html:not(.is-native) .admin-glance .admin-note { margin: 0; font-size: 13px; color: var(--text-muted); }
+  html:not(.is-native) .admin-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); overflow: visible; }
+  html:not(.is-native) .admin-stat { display: flex; flex-direction: column; gap: 2px; padding: 20px; min-width: 0; }
+  html:not(.is-native) .admin-stat + .admin-stat { border-left: 1px solid var(--border-subtle); }
+  html:not(.is-native) .admin-stat b { font-size: 28px; line-height: 36px; font-weight: 600; }
+  html:not(.is-native) .admin-stat span { font-size: 13px; color: var(--text-secondary); }
+  html:not(.is-native) .admin-stat__bar { margin-top: 8px; }
+  html:not(.is-native) .admin-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 32px; align-items: start; }
+  html:not(.is-native) .admin-main, html:not(.is-native) .admin-aside { display: flex; flex-direction: column; gap: 32px; min-width: 0; }
+  html:not(.is-native) .admin .admin-btn { padding: 0 16px; }
+  html:not(.is-native) .admin-row__actions { gap: 12px; }
+  html:not(.is-native) .admin-request { flex-wrap: nowrap; padding: 12px 20px; }
+  html:not(.is-native) .has-shell .admin-request__avatar.web-only { width: 40px; height: 40px; flex-shrink: 0; border-radius: var(--radius-pill); background: var(--bg-raised); color: var(--text-secondary); display: flex; align-items: center; justify-content: center; font-weight: 600; }
+  html:not(.is-native) .admin-trow { display: grid; align-items: center; gap: 16px; min-height: 56px; padding: 8px 20px; box-sizing: border-box; font-size: 14px; color: var(--text-secondary); }
+  html:not(.is-native) .admin-trow > * { min-width: 0; overflow-wrap: anywhere; }
+  html:not(.is-native) .admin-trow .num { text-align: right; }
+  html:not(.is-native) .admin-trow--head { min-height: 44px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); }
+  html:not(.is-native) .admin-table--users .admin-trow { grid-template-columns: minmax(0, 2fr) 120px 140px 80px 90px 110px; }
+  html:not(.is-native) .admin-table--activity .admin-trow { grid-template-columns: 220px minmax(0, 1fr) 160px; }
+  html:not(.is-native) .admin-table .admin-user { border-top: 1px solid var(--border-subtle); }
+  html:not(.is-native) .admin-trow__name { color: var(--text-primary); font-weight: 500; }
+  html:not(.is-native) .admin-trow__you { margin-left: 8px; font-size: 12px; font-weight: 400; color: var(--text-muted); }
+  html:not(.is-native) .admin-table .admin-user__actions { justify-content: flex-end; padding: 12px 20px; background: var(--bg-surface); border-top: 1px solid var(--border-subtle); }
+  html:not(.is-native) .admin-aside .settings-row { padding: 14px 16px; gap: 12px; }
+  html:not(.is-native) .admin-aside .settings-row__sub { font-size: 12px; line-height: 17px; }
+  html:not(.is-native) .admin-aside .settings-row__btn { min-height: 32px; padding: 0 12px; }
+  html:not(.is-native) .admin-aside .admin-section__head .admin-btn { margin-left: auto; }
+  html:not(.is-native) .admin-aside .admin-note { margin: 0; font-size: 12px; color: var(--text-muted); }
+  html:not(.is-native) .admin-modes { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 }

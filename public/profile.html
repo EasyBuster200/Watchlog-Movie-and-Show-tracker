@@ -33,8 +33,10 @@
   <script type="text/javascript" src="scripts/profile.js" defer></script>
 </head>
 <body>
-  <main class="screen">
-    <section class="profile-card" aria-label="Profile">
+  <main class="screen profile-screen">
+    <section class="web-only web-profile" id="web-profile" aria-label="Profile"></section>
+
+    <section class="profile-card phone-only" aria-label="Profile">
       <div class="profile-card__main">
         <div class="profile-card__avatar" id="profile-avatar" aria-hidden="true"></div>
         <div class="profile-card__name">
@@ -56,7 +58,7 @@
       </div>
     </section>
 
-    <a class="settings-card settings-row profile-friends" id="friends-link" href="friends.html">
+    <a class="settings-card settings-row profile-friends phone-only" id="friends-link" href="friends.html">
       <span class="settings-row__text">
         <span class="settings-row__label">Friends</span>
         <span class="settings-row__sub" id="friends-link-sub">Add friends with a friend code</span>
@@ -64,7 +66,7 @@
       <span class="settings-row__value"><svg class="tt-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></span>
     </a>
 
-    <section class="stack" aria-labelledby="profile-stats-title">
+    <section class="stack phone-only" aria-labelledby="profile-stats-title">
       <div class="tt-section"><h2 id="profile-stats-title">Stats</h2><a class="tt-link" href="stats.html">See all</a></div>
       <div class="stat-grid" id="stats-grid"></div>
     </section>
