@@ -246,4 +246,30 @@ export interface BottomNavProps {
 }
 export declare function BottomNav(props: BottomNavProps): React.ReactElement;
 
-declare global { interface Window { TVTracker: { Icon: typeof Icon; Button: typeof Button; SearchField: typeof SearchField; SectionHeader: typeof SectionHeader; BackButton: typeof BackButton; PosterArt: typeof PosterArt; PosterCard: typeof PosterCard; MediaRow: typeof MediaRow; AiringRow: typeof AiringRow; CastCard: typeof CastCard; Chip: typeof Chip; Switch: typeof Switch; TextField: typeof TextField; BrowseHeader: typeof BrowseHeader; ProgressBar: typeof ProgressBar; SeasonRow: typeof SeasonRow; EpisodeCard: typeof EpisodeCard; StatTile: typeof StatTile; BottomNav: typeof BottomNav; SideNav: typeof SideNav } } }
+export interface TopNavProps { active?: 'home' | 'watchlist' | 'lists' | 'movies' | 'shows' | 'profile'; hrefs?: Partial<Record<'home' | 'watchlist' | 'lists' | 'movies' | 'shows' | 'profile', string>>; brand?: string; userName?: string; searchPlaceholder?: string; maxWidth?: number; }
+/** Browser header: brand, text links with an accent-mark underline on the active one, search with a "/" hint and the avatar (ringed on Profile). Sticky, 64px. */
+export declare function TopNav(props: TopNavProps): React.ReactElement;
+export interface SiteFooterProps { hrefs?: Partial<Record<'movies' | 'shows' | 'watchlist' | 'lists' | 'profile' | 'settings' | 'profiles', string>>; maxWidth?: number; }
+/** Browser footer: about blurb, link columns and the TMDB credit with a logo placeholder. */
+export declare function SiteFooter(props: SiteFooterProps): React.ReactElement;
+export interface LandscapeCardProps { title: string; meta?: string; image?: string; badge?: string; watched?: number; total?: number; href?: string; }
+/** 16:9 still with an optional badge, a progress bar along the bottom and a play button on hover. Browser Continue Watching. */
+export declare function LandscapeCard(props: LandscapeCardProps): React.ReactElement;
+export interface EpisodeRowProps { number: number; title: string; date?: string; runtime?: string; synopsis?: string; image?: string; watched?: boolean; onToggle?: (watched: boolean) => void; }
+/** Browser episode list row: 200px still, title and meta, synopsis, and a labelled "Mark watched" pill. */
+export declare function EpisodeRow(props: EpisodeRowProps): React.ReactElement;
+
+export interface SettingsRowProps { label: string; sub?: string; kind?: 'link' | 'switch' | 'button' | 'danger'; value?: string; checked?: boolean; onChange?: (on: boolean) => void; onClick?: () => void; href?: string; badge?: string | number; disabled?: boolean; }
+/** One row in a settings-style card: label and sub on the left; a chevron (with optional value), a Switch, or a small pill button on the right. Danger rows turn the label and button red. Stack rows inside a bg-card; hairlines are drawn between them. */
+export declare function SettingsRow(props: SettingsRowProps): React.ReactElement;
+export interface SegmentedControlProps { options: string[]; value?: string; onChange?: (value: string) => void; label?: string; }
+/** A small segmented control for one in-place choice that applies at once (Settings' theme). Not for filters: those go in BrowseHeader. */
+export declare function SegmentedControl(props: SegmentedControlProps): React.ReactElement;
+export interface StatusPillProps { label: string; tone?: 'success' | 'danger' | 'warning' | 'neutral'; }
+/** A small status label (Active, Suspended, Recovering, Watching, Dropped). */
+export declare function StatusPill(props: StatusPillProps): React.ReactElement;
+export interface OptionCardProps { label: string; description?: string; selected?: boolean; onClick?: () => void; }
+/** A radio choice with a description line, stacked in a role="radiogroup" (Admin's sign-up mode). */
+export declare function OptionCard(props: OptionCardProps): React.ReactElement;
+
+declare global { interface Window { TVTracker: { Icon: typeof Icon; Button: typeof Button; SearchField: typeof SearchField; SectionHeader: typeof SectionHeader; BackButton: typeof BackButton; PosterArt: typeof PosterArt; PosterCard: typeof PosterCard; MediaRow: typeof MediaRow; AiringRow: typeof AiringRow; CastCard: typeof CastCard; Chip: typeof Chip; Switch: typeof Switch; TextField: typeof TextField; BrowseHeader: typeof BrowseHeader; ProgressBar: typeof ProgressBar; SeasonRow: typeof SeasonRow; EpisodeCard: typeof EpisodeCard; StatTile: typeof StatTile; BottomNav: typeof BottomNav; SideNav: typeof SideNav; TopNav: typeof TopNav; SiteFooter: typeof SiteFooter; LandscapeCard: typeof LandscapeCard; EpisodeRow: typeof EpisodeRow; SettingsRow: typeof SettingsRow; SegmentedControl: typeof SegmentedControl; StatusPill: typeof StatusPill; OptionCard: typeof OptionCard } } }

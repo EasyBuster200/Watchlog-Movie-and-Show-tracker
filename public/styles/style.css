@@ -973,105 +973,136 @@ button.settings-row:disabled { cursor: default; opacity: 0.5; background: none; 
 /* ---------- Laptop layout (the design's "Browser layout") ----------
    Laptops only: a wide window with a mouse or trackpad, in a browser. Phones, tablets (touch)
    and the Android app (html.is-native, even on a big tablet) keep the phone layout above.
-   media.js builds the sidebar (renderSideNav) on every page with a bottom nav; it's hidden
-   everywhere else. */
-.tt-sidenav { display: none; }
+   media.js builds the browser shell (renderBrowserShell: TopNav, SiteFooter, breadcrumbs, row
+   arrows) on every page with a bottom nav; it's hidden everywhere else. */
+.tt-topnav, .tt-footer, .tt-crumbs, .tt-arrows { display: none; }
 .auth__mosaic { display: none; }
 .auth__panel { width: 100%; flex: 1; display: flex; flex-direction: column; align-items: center; }
+.tt-sidenav__mark {
+  width: 28px; height: 28px; border-radius: 8px; background: var(--accent); color: var(--on-accent);
+  display: flex; align-items: center; justify-content: center;
+}
+.tt-sidenav__avatar {
+  width: 32px; height: 32px; flex-shrink: 0; border-radius: var(--radius-pill); background: var(--accent); color: var(--on-accent);
+  display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600;
+}
 
 @media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
-  html:not(.is-native) body.has-sidenav { padding-left: 248px; }
+  html:not(.is-native) body.has-shell { display: flex; flex-direction: column; min-height: 100vh; }
+  html:not(.is-native) body.has-shell > main { flex-grow: 1; width: 100%; }
   html:not(.is-native) .tt-nav { display: none; }
 
-  /* Sidebar */
-  html:not(.is-native) .tt-sidenav {
-    position: fixed; top: 0; bottom: 0; left: 0; z-index: 40; width: 248px; box-sizing: border-box;
-    display: flex; flex-direction: column; gap: var(--space-6); overflow-y: auto;
-    padding: var(--space-6) var(--space-4); background: var(--bg-surface);
-    border-right: 1px solid var(--border-subtle); font-family: var(--font-sans);
+  /* TopNav: sticky, 64px, inner width 1280px. */
+  html:not(.is-native) .tt-topnav {
+    display: block; position: sticky; top: 0; z-index: 30;
+    background: color-mix(in srgb, var(--bg-page) 88%, transparent); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-subtle); font-family: var(--font-sans);
   }
-  .tt-sidenav__brand {
-    display: flex; align-items: center; gap: 10px; padding: 0 var(--space-2);
-    font-size: 18px; font-weight: 600; color: var(--text-primary); text-decoration: none;
-  }
-  .tt-sidenav__mark {
-    width: 28px; height: 28px; border-radius: 8px; background: var(--accent); color: var(--on-accent);
-    display: flex; align-items: center; justify-content: center;
-  }
-  .tt-sidenav__search .tt-search { height: 40px; }
-  .tt-sidenav__items { display: flex; flex-direction: column; gap: 2px; }
-  .tt-sidenav__item {
-    min-height: 44px; padding: 0 var(--space-3); display: flex; align-items: center; gap: var(--space-3);
-    border-radius: var(--radius-md); color: var(--text-secondary); font-size: 14px; font-weight: 500;
-    text-decoration: none; transition: background-color 150ms ease-out, color 150ms ease-out;
-  }
-  .tt-sidenav__item:hover { background: var(--bg-card); color: var(--text-primary); }
-  .tt-sidenav__item--on, .tt-sidenav__item--on:hover { background: var(--accent-subtle); color: var(--text-primary); }
-  .tt-sidenav__item--on .tt-icon { color: var(--accent-mark); }
-  .tt-sidenav__item:focus-visible, .tt-sidenav__me:focus-visible, .tt-sidenav__brand:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
-  .tt-sidenav__foot {
-    margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
-    padding-top: var(--space-4); border-top: 1px solid var(--border-subtle);
-  }
-  .tt-sidenav__me {
-    flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 var(--space-2);
-    border-radius: var(--radius-md); color: var(--text-primary); font-size: 14px; font-weight: 500; text-decoration: none;
-  }
-  .tt-sidenav__me:hover { background: var(--bg-card); }
-  .tt-sidenav__avatar {
-    width: 32px; height: 32px; flex-shrink: 0; border-radius: var(--radius-pill); background: var(--accent); color: var(--on-accent);
-    display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600;
-  }
-  .tt-sidenav__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tt-sidenav__settings { color: var(--text-secondary); flex-shrink: 0; }
+  .tt-topnav__in { max-width: 1280px; margin: 0 auto; height: 64px; padding: 0 40px; display: flex; align-items: center; gap: 36px; box-sizing: content-box; }
+  .tt-topnav__brand { display: inline-flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 600; color: var(--text-primary); text-decoration: none; flex-shrink: 0; }
+  .tt-topnav__links { display: flex; align-items: stretch; gap: 4px; height: 100%; }
+  .tt-topnav__link { position: relative; display: flex; align-items: center; padding: 0 12px; font-size: 14px; font-weight: 500; color: var(--text-secondary); text-decoration: none; }
+  .tt-topnav__link:hover { color: var(--text-primary); }
+  .tt-topnav__link--on { color: var(--text-primary); }
+  .tt-topnav__link--on::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--accent-mark); }
+  .tt-topnav__end { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+  .tt-topnav__form { margin: 0; }
+  .tt-topnav__search { display: flex; align-items: center; gap: 8px; width: 300px; height: 38px; padding: 0 8px 0 12px; box-sizing: border-box; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); color: var(--text-muted); }
+  .tt-topnav__search:focus-within { border-color: var(--accent-mark); }
+  .tt-topnav__search input { flex: 1; min-width: 0; height: 100%; background: transparent; border: 0; outline: 0; color: var(--text-primary); font-family: var(--font-sans); font-size: 13px; }
+  .tt-topnav__search input::placeholder { color: var(--text-muted); }
+  .tt-topnav__search kbd { font-family: var(--font-sans); font-size: 11px; line-height: 18px; padding: 0 6px; border: 1px solid var(--border-strong); border-radius: 4px; color: var(--text-muted); }
+  .tt-topnav__me { display: flex; border-radius: 999px; text-decoration: none; }
+  .tt-topnav__me--on { box-shadow: 0 0 0 2px var(--bg-page), 0 0 0 4px var(--accent-mark); }
+  .tt-topnav__link:focus-visible, .tt-topnav__me:focus-visible, .tt-topnav__brand:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; border-radius: 6px; }
 
-  /* Content: 40px padding, no room kept for the bottom bar, a readable maximum width. */
-  html:not(.is-native) .has-sidenav .screen { padding: 32px 40px 48px; max-width: 1360px; }
-  html:not(.is-native) .has-sidenav .screen--flush { padding: 0 0 48px; max-width: none; }
-  html:not(.is-native) .has-sidenav .page-header { padding: 20px 40px 14px; }
-  html:not(.is-native) .has-sidenav .page-body { padding: 24px 40px 48px; max-width: 1360px; }
-  html:not(.is-native) .has-sidenav .search-bar--home { display: none; }
+  /* SiteFooter */
+  html:not(.is-native) .tt-footer { display: block; border-top: 1px solid var(--border-subtle); background: var(--bg-surface); font-family: var(--font-sans); }
+  .tt-footer__in { max-width: 1280px; margin: 0 auto; padding: 48px 40px 32px; display: flex; flex-direction: column; gap: 32px; box-sizing: content-box; }
+  .tt-footer__top { display: flex; flex-wrap: wrap; gap: 48px; }
+  .tt-footer__about { flex: 1 1 280px; display: flex; flex-direction: column; gap: 12px; }
+  .tt-footer__about p { margin: 0; max-width: 320px; font-size: 13px; line-height: 20px; color: var(--text-secondary); }
+  .tt-footer__col { flex: 0 0 140px; display: flex; flex-direction: column; gap: 10px; }
+  .tt-footer__h { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); }
+  .tt-footer__a { font-size: 14px; color: var(--text-secondary); text-decoration: none; }
+  .tt-footer__a:hover { color: var(--text-primary); }
+  .tt-footer__tmdb { display: flex; align-items: center; gap: 16px; padding-top: 24px; border-top: 1px solid var(--border-subtle); }
+  .tt-footer__logo { flex-shrink: 0; display: flex; align-items: center; }
+  .tt-footer__logo img { height: 32px; width: auto; display: block; }
+  .tt-footer__tmdb p { margin: 0; font-size: 12px; line-height: 18px; color: var(--text-muted); }
+  .tt-footer__tmdb a { color: inherit; }
+  .tt-footer__a:focus-visible, .tt-footer__logo:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; border-radius: 4px; }
 
-  /* Rows of posters become wrapping grids; so do the three-column grids and cast rows. */
-  html:not(.is-native) .has-sidenav .poster-row {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    column-gap: var(--space-4); row-gap: var(--space-6);
-    overflow: visible; margin: 0; padding: 0 0 10px;
+  /* Breadcrumbs replace the back button. */
+  html:not(.is-native) .has-shell .tt-back { display: none; }
+  html:not(.is-native) .tt-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); }
+  .tt-crumbs a { color: var(--text-secondary); text-decoration: none; }
+  .tt-crumbs a:hover { color: var(--text-primary); }
+  .tt-crumbs__sep { color: var(--text-muted); }
+  .tt-crumbs__here { color: var(--text-primary); }
+  .tt-crumbs a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; border-radius: 4px; }
+  html:not(.is-native) .tt-crumbs--over { position: absolute; z-index: 1; top: 24px; left: max(40px, calc((100% - 1280px) / 2)); }
+
+  /* Content: a centred 1280px column with 40px side padding, like the header and footer; no
+     room kept for the bottom bar. */
+  html:not(.is-native) .has-shell .screen { padding: 32px 40px 72px; max-width: 1280px; margin: 0 auto; box-sizing: content-box; }
+  html:not(.is-native) .has-shell .screen--flush { padding: 0 0 72px; max-width: none; margin: 0; }
+  html:not(.is-native) .has-shell .page-header { top: 64px; padding: 20px max(40px, calc((100% - 1280px) / 2)) 14px; }
+  html:not(.is-native) .has-shell .page-body { padding: 24px 40px 72px; max-width: 1280px; margin: 0 auto; box-sizing: content-box; }
+  html:not(.is-native) .has-shell .search-bar--home { display: none; }
+
+  /* Section titles: "See all" and the row arrows on the right. */
+  html:not(.is-native) .has-shell .tt-section { justify-content: flex-start; align-items: center; gap: 16px; }
+  html:not(.is-native) .has-shell .tt-section h2 { font-size: 22px; line-height: 30px; }
+  html:not(.is-native) .has-shell .tt-section > :nth-child(2) { margin-left: auto; }
+  html:not(.is-native) .has-shell .tt-section > .tt-link { font-size: 14px; color: var(--text-secondary); }
+  html:not(.is-native) .has-shell .tt-section > .tt-link:hover { color: var(--text-primary); }
+  html:not(.is-native) .tt-arrows { display: flex; gap: 8px; }
+  .tt-arrow { width: 36px; height: 36px; padding: 0; border-radius: 999px; border: 1px solid var(--border-subtle); background: transparent; color: var(--text-primary); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .tt-arrow:hover { border-color: var(--border-strong); }
+  .tt-arrow[aria-disabled="true"] { color: var(--text-muted); opacity: .5; cursor: default; }
+  .tt-arrow:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+
+  /* Poster rows: seven across (164px posters at 1280, 20px gaps), paged by the arrows. */
+  html:not(.is-native) .has-shell .poster-row {
+    display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 120px) / 7); gap: 20px;
+    overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none;
+    margin: 0; padding: 0 0 10px; scroll-padding: 0;
   }
-  html:not(.is-native) .has-sidenav .poster-row .tt-poster { width: auto; }
-  html:not(.is-native) .has-sidenav .poster-row > .empty-note { max-width: none; grid-column: 1 / -1; }
-  html:not(.is-native) .has-sidenav .poster-grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); column-gap: var(--space-4); row-gap: var(--space-6);
+  html:not(.is-native) .has-shell .poster-row > * { scroll-snap-align: start; min-width: 0; }
+  html:not(.is-native) .has-shell .poster-row .tt-poster { width: auto; }
+  html:not(.is-native) .has-shell .poster-row > .empty-note { max-width: none; grid-column: 1 / -1; }
+  html:not(.is-native) .has-shell .poster-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); column-gap: 20px; row-gap: var(--space-6);
   }
-  html:not(.is-native) .has-sidenav .poster-grid .tt-poster__title { font-size: 14px; line-height: 20px; }
-  html:not(.is-native) .has-sidenav .poster-grid .tt-poster__meta { font-size: 12px; line-height: 17px; }
-  html:not(.is-native) .has-sidenav .poster-grid .tt-toggle { width: 34px; height: 34px; }
-  html:not(.is-native) .has-sidenav .cast-row:not(.expanded) { flex-wrap: wrap; overflow: visible; row-gap: var(--space-4); margin: 0; padding: 0; }
-  html:not(.is-native) .has-sidenav .cast-row { margin: 0; padding: 0; }
+  html:not(.is-native) .has-shell .poster-grid .tt-poster__title { font-size: 14px; line-height: 20px; }
+  html:not(.is-native) .has-shell .poster-grid .tt-poster__meta { font-size: 12px; line-height: 17px; }
+  html:not(.is-native) .has-shell .poster-grid .tt-toggle { width: 34px; height: 34px; }
+  html:not(.is-native) .has-shell .cast-row:not(.expanded) { flex-wrap: wrap; overflow: visible; row-gap: var(--space-4); }
+  html:not(.is-native) .has-shell .cast-row { margin: 0; padding: 0; }
 
-  /* Detail and actor pages: a taller hero, and room around the head. */
-  html:not(.is-native) .has-sidenav .detail-hero { height: 340px; }
-  html:not(.is-native) .has-sidenav .detail-hero .tt-back { top: 24px; left: 40px; }
-  html:not(.is-native) .has-sidenav .detail-head { margin-top: -96px; padding: 0 40px; gap: 24px; }
-  html:not(.is-native) .has-sidenav .detail-head .tt-poster__art { width: 160px; }
-  html:not(.is-native) .has-sidenav .detail-head__info h1 { font-size: 32px; line-height: 40px; }
-  html:not(.is-native) .has-sidenav .detail-body { padding: 28px 40px 0; max-width: 1360px; }
+  /* Detail and actor pages: a taller hero, the head and body in the content column. */
+  html:not(.is-native) .has-shell .detail-hero { height: 340px; }
+  html:not(.is-native) .has-shell .detail-head { margin-top: -96px; padding: 0 max(40px, calc((100% - 1280px) / 2)); gap: 24px; }
+  html:not(.is-native) .has-shell .detail-head .tt-poster__art { width: 160px; }
+  html:not(.is-native) .has-shell .detail-head__info h1 { font-size: 32px; line-height: 40px; }
+  html:not(.is-native) .has-shell .detail-body { padding: 28px 40px 0; max-width: 1280px; margin: 0 auto; box-sizing: content-box; }
 
-  /* Sheets, toasts and menus sit over the content column, not the sidebar. */
-  html:not(.is-native) .tt-bh-layer .tt-sheet--bottom { left: calc(248px + 40px); right: 40px; max-width: 640px; margin: 0 auto; }
-  html:not(.is-native) .sync-toast { left: calc(248px + var(--space-4)); bottom: 24px; }
+  /* Sheets and toasts sit over the content, centred. */
+  html:not(.is-native) .tt-bh-layer .tt-sheet--bottom { left: 40px; right: 40px; max-width: 640px; margin: 0 auto; }
+  html:not(.is-native) .sync-toast { bottom: 24px; }
 
-  /* Sign-in screens: the form on the right, a poster mosaic on the left. */
   /* Detail pages in a wide window: the main content and a side column with the cast, which
      stack again below 1200px (about 900px of content). */
   @media (min-width: 1200px) {
-    html:not(.is-native) .has-sidenav .detail-body {
+    html:not(.is-native) .has-shell .detail-body {
       display: grid; grid-template-columns: minmax(0, 1fr) 340px; column-gap: 48px; row-gap: var(--space-6); align-items: start;
     }
-    html:not(.is-native) .has-sidenav .detail-body > * { grid-column: 1; min-width: 0; }
-    html:not(.is-native) .has-sidenav .detail-body > #cast-section { grid-column: 2; grid-row: 1 / span 8; }
+    html:not(.is-native) .has-shell .detail-body > * { grid-column: 1; min-width: 0; }
+    html:not(.is-native) .has-shell .detail-body > #cast-section { grid-column: 2; grid-row: 1 / span 8; }
   }
 
+  /* Sign-in screens: the form on the right, a poster mosaic on the left. */
   html:not(.is-native) .auth { display: grid; grid-template-columns: minmax(0, 1fr) minmax(460px, 40%); align-items: stretch; padding: 0; }
   html:not(.is-native) .auth__mosaic {
     display: block; position: relative; overflow: hidden; height: 100vh; position: sticky; top: 0;

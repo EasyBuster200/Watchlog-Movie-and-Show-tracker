@@ -38,7 +38,20 @@ Components never use a palette directly: they read `accent`, `accent-hover`, `ac
 
 ## Browser layout
 
-At desktop widths the app uses `SideNav` instead of `BottomNav`: a left sidebar with the wordmark, search, the same six sections and the profile/settings at the foot. Content sits to its right with 32–40px padding, and rows of posters become wrapping grids (`repeat(auto-fill, minmax(150px, 1fr))`). Detail pages put the main content and a side column (cast, details) next to each other, stacking below 900px. The sidebar stacks above the content on narrow windows.
+On laptops and desktops the app is a normal website, not a stretched phone screen:
+
+- **Header and footer.** `TopNav` across the top (wordmark, text links with an `accent-mark` underline on the current page, a 300px search with a "/" hint, the avatar for Profile) and `SiteFooter` at the bottom (link columns and the TMDB credit). `BottomNav` and the back button aren't used in the browser; breadcrumbs replace the back button. `SideNav` stays in the system as an alternative.
+- **Content width.** Content sits in a centred 1280px column with 40px side padding, the same as the header and footer.
+- **Heroes.** Home and detail pages open with a full-width backdrop hero (image faded into `bg-page` from the left and bottom) holding the title, meta line, overview, progress and actions.
+- **Grids.** Poster rows are 7 columns at 1280px (164px posters, 20px gaps), with "See all" and prev/next arrows on the right of the section title. Continue Watching uses `LandscapeCard`s, 4 across. Airing Soon becomes a 7-day week strip.
+- **Detail pages.** A main column plus a 320px sidebar (next episode, details). Episodes are an `EpisodeRow` list under season tabs, and the cast is a full-width row.
+- **Browse pages.** A 240px filter sidebar (genre checklist with counts, release year, hide watched) next to a 6-column grid, a sort dropdown in the page header, collection tabs, and numbered pagination.
+
+## Settings and admin pages
+
+Settings-style pages are labelled sections (`tt-filter-label` on the phone, an 18px heading in the browser), each a `bg-card` with `SettingsRow`s: a chevron for navigation (with the current value, e.g. "English"), a `Switch` for on/off, a small pill button for an action ("Sync now", "Change", "Export"), and `kind="danger"` for destructive rows (Delete, Reset), which always confirm first. A `tt-badge` count sits before the control when something is waiting ("2 waiting to join"). The theme is a `SegmentedControl`; accent colours are 36–40px swatches with a `text-primary` ring on the chosen one. In the browser, Settings adds a sticky list of the sections on the left and keeps the content at most 800px wide.
+
+The admin page leads with a strip of numbers (one `bg-card` split by hairlines; TMDB use against the daily cap gets a `ProgressBar`). Join requests are rows with Decline (secondary) and Approve (primary). Accounts and activity are grid "tables" (header row in uppercase `text-muted`, hairlines between rows) with `StatusPill`s: success = Active, warning = Recovering, danger = Suspended. Manage opens that account's actions in a row underneath, with Delete account last and red. The sign-up mode is a radio group of `OptionCard`s, each with the description of what it does. On the phone it's all one column of sections; in the browser the requests, accounts and activity take the main column and sign-up mode, invites, TMDB and this device sit in a 360px sidebar.
 
 ## Filters
 
@@ -46,7 +59,7 @@ Filtering and sorting never take a row of their own. Every browsable list starts
 
 ## Sign-in and forms
 
-The app opens on **Who's watching?**: a card list of profiles (avatar, name, and a meta line with a `cloud` icon for synced accounts or a `lock` icon for offline ones, plus Edit and a `danger` Delete), then Sign in (primary) and two secondary buttons side by side: Offline profile and Import backup. An offline profile needs only a display name and a TMDB API Read Access Token (a password-type `TextField` with show/hide); it stays on the device and never syncs. Import backup takes the .json from Settings → Export data or Auto-backup, shows what's in it, then restores it as an offline profile or into a signed-in account.
+The app opens on **Who's watching?**: a card list of profiles (avatar, name, and a meta line with a `cloud` icon for synced accounts or a `lock` icon for offline ones, plus Edit and a `danger` Delete), then Sign in (primary) and two secondary buttons side by side: Offline profile and Import backup. Online accounts use **account keys**, not passwords: sign-up asks only for a name and an email, then shows the generated key (monospace, with Copy and Save as file) before continuing. Sign in is one password-type `TextField` for the key. The email is used only for recovery: "Lost your key?" sends a recovery link. An offline profile needs only a display name and a TMDB API Read Access Token (a password-type `TextField` with show/hide); it stays on the device and never syncs. Import backup takes the .json from Settings → Export data or Auto-backup, shows what's in it, then restores it as an offline profile or into a signed-in account.
 
 Auth screens are a single centred column, max 400px: the Watchlog mark, a title and one line of context, `TextField`s, then one full-width primary `Button`. Secondary routes are text links in `accent-text`. Every auth screen ends with the TMDB credit: "This app uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB." plus the TMDB key line and TMDB's official logo (use the file from TMDB; never redraw it). In the browser, the form sits on the right of a split layout with a poster mosaic on the left.
 
@@ -56,7 +69,7 @@ Line icons, 24px grid, 1.8px stroke, round caps and joins, no fills. Inactive ic
 
 ## Components
 
-`Icon`, `Button`, `BackButton`, `SearchField`, `SectionHeader`, `PosterArt`, `PosterCard`, `MediaRow`, `AiringRow`, `CastCard`, `Chip`, `Switch`, `TextField`, `BrowseHeader`, `ProgressBar`, `SeasonRow`, `EpisodeCard`, `StatTile`, `BottomNav`, `SideNav`. Each reads only tokens, so restyling the tokens restyles the app. Every show or movie artwork, at any size, is `PosterArt` (inside `PosterCard`, `MediaRow` and the show header), so posters look the same everywhere. Every screen below the top level uses `BackButton` at its top-left. Pass real poster/still URLs through `image`; without one, cards show a `bg-raised` placeholder with the title's initials.
+`Icon`, `Button`, `BackButton`, `SearchField`, `SectionHeader`, `PosterArt`, `PosterCard`, `MediaRow`, `AiringRow`, `CastCard`, `Chip`, `Switch`, `TextField`, `BrowseHeader`, `ProgressBar`, `SeasonRow`, `EpisodeCard`, `StatTile`, `BottomNav`, `SideNav`, `TopNav`, `SiteFooter`, `LandscapeCard`, `EpisodeRow`, `SettingsRow`, `SegmentedControl`, `StatusPill`, `OptionCard`. Each reads only tokens, so restyling the tokens restyles the app. Every show or movie artwork, at any size, is `PosterArt` (inside `PosterCard`, `MediaRow` and the show header), so posters look the same everywhere. Every screen below the top level uses `BackButton` at its top-left. Pass real poster/still URLs through `image`; without one, cards show a `bg-raised` placeholder with the title's initials.
 
 ## What's not here yet
 
