@@ -11,18 +11,26 @@
     "components/CastCard/README.md",
     "components/Chip/README.md",
     "components/EpisodeCard/README.md",
+    "components/EpisodeRow/README.md",
     "components/Icon/README.md",
+    "components/LandscapeCard/README.md",
     "components/MediaRow/README.md",
+    "components/OptionCard/README.md",
     "components/PosterArt/README.md",
     "components/PosterCard/README.md",
     "components/ProgressBar/README.md",
     "components/SearchField/README.md",
     "components/SeasonRow/README.md",
     "components/SectionHeader/README.md",
+    "components/SegmentedControl/README.md",
+    "components/SettingsRow/README.md",
     "components/SideNav/README.md",
+    "components/SiteFooter/README.md",
     "components/StatTile/README.md",
+    "components/StatusPill/README.md",
     "components/Switch/README.md",
     "components/TextField/README.md",
+    "components/TopNav/README.md",
     "components/bundle.css",
     "components/bundle.js",
     "components/index.d.ts",
@@ -140,6 +148,46 @@
       "name": "SideNav",
       "group": "Navigation",
       "summary": "The left sidebar for the browser version of the app, replacing BottomNav at desktop widths."
+    },
+    {
+      "name": "TopNav",
+      "group": "Navigation",
+      "summary": "Browser header: wordmark, text links (Home, Watchlist, Lists, Movies, Shows) with an accent-mark underline under the current page, a search field with a \"/\" sh…"
+    },
+    {
+      "name": "SiteFooter",
+      "group": "Navigation",
+      "summary": "Browser footer: about blurb, Browse/Account/About link columns, and the TMDB credit with a dashed placeholder for TMDB's official logo (use the real file from…"
+    },
+    {
+      "name": "LandscapeCard",
+      "group": "Media",
+      "summary": "16:9 still with title and meta below, an optional badge (e.g."
+    },
+    {
+      "name": "EpisodeRow",
+      "group": "Media",
+      "summary": "Browser episode row: 200px still with the episode number, title and air date/runtime, the synopsis, and a labelled \"Mark watched\" pill that turns accent-subtle…"
+    },
+    {
+      "name": "SettingsRow",
+      "group": "Lists",
+      "summary": "One row in a settings-style card."
+    },
+    {
+      "name": "SegmentedControl",
+      "group": "Inputs",
+      "summary": "A compact segmented control for one in-place choice that applies at once, such as Settings' theme (Dark / Light / Match device)."
+    },
+    {
+      "name": "StatusPill",
+      "group": "Feedback",
+      "summary": "A small tinted status label: success (Active, Watching), warning (Recovering), danger (Suspended, Dropped), neutral (anything else)."
+    },
+    {
+      "name": "OptionCard",
+      "group": "Inputs",
+      "summary": "A radio choice with a description, for a few options that each need explaining (Admin's sign-up mode: Closed, Invite only, Approval, Open)."
     }
   ],
   "assetGroups": []

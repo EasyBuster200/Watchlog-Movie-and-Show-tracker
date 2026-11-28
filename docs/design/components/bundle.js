@@ -1,4 +1,4 @@
-/* @ds-bundle: {"format":4,"namespace":"TVTracker","components":[{"name":"Icon"},{"name":"Button"},{"name":"SearchField"},{"name":"SectionHeader"},{"name":"BackButton"},{"name":"PosterArt"},{"name":"PosterCard"},{"name":"MediaRow"},{"name":"AiringRow"},{"name":"CastCard"},{"name":"Chip"},{"name":"Switch"},{"name":"TextField"},{"name":"BrowseHeader"},{"name":"ProgressBar"},{"name":"SeasonRow"},{"name":"EpisodeCard"},{"name":"StatTile"},{"name":"BottomNav"},{"name":"SideNav"}]} */
+/* @ds-bundle: {"format":4,"namespace":"TVTracker","components":[{"name":"Icon"},{"name":"Button"},{"name":"SearchField"},{"name":"SectionHeader"},{"name":"BackButton"},{"name":"PosterArt"},{"name":"PosterCard"},{"name":"MediaRow"},{"name":"AiringRow"},{"name":"CastCard"},{"name":"Chip"},{"name":"Switch"},{"name":"TextField"},{"name":"BrowseHeader"},{"name":"ProgressBar"},{"name":"SeasonRow"},{"name":"EpisodeCard"},{"name":"StatTile"},{"name":"BottomNav"},{"name":"SideNav"},{"name":"TopNav"},{"name":"SiteFooter"},{"name":"LandscapeCard"},{"name":"EpisodeRow"},{"name":"SettingsRow"},{"name":"SegmentedControl"},{"name":"StatusPill"},{"name":"OptionCard"}]} */
 (function () {
   var React = window.React;
   var h = React.createElement;
@@ -266,7 +266,7 @@
                 onClick: function () { setDraft(sec.id, on ? v.filter(function (x) { return x !== o; }) : (v || []).concat([o])); }
               }, o, check());
             }))
-            : h('div', { className: 'tt-seg', role: 'group', 'aria-label': sec.label }, sec.options.map(function (o) {
+            : h('div', { className: 'tt-seg tt-seg--inline', role: 'group', 'aria-label': sec.label }, sec.options.map(function (o) {
               var on = v === o;
               return h('button', { key: o, type: 'button', 'aria-pressed': on, className: cx('tt-seg__item', on && 'tt-seg__item--on'), onClick: function () { setDraft(sec.id, o); } }, o);
             }))
@@ -443,9 +443,141 @@
     );
   }
 
+  function TopNav(props) {
+    var hrefs = props.hrefs || {};
+    var links = NAV.filter(function (n) { return n.id !== 'profile'; });
+    var name = props.userName || 'Duarte';
+    return h('header', { className: 'tt-topnav' },
+      h('div', { className: 'tt-topnav__in', style: props.maxWidth ? { maxWidth: props.maxWidth } : undefined },
+        h(hrefs.home ? 'a' : 'span', { className: 'tt-topnav__brand', href: hrefs.home },
+          h('span', { className: 'tt-sidenav__mark', 'aria-hidden': 'true' }, h(Icon, { name: 'play', size: 14, filled: true })),
+          props.brand || 'Watchlog'),
+        h('nav', { className: 'tt-topnav__links', 'aria-label': 'Main' }, links.map(function (it) {
+          var on = props.active === it.id;
+          return h(hrefs[it.id] ? 'a' : 'span', {
+            key: it.id, href: hrefs[it.id], className: cx('tt-topnav__link', on && 'tt-topnav__link--on'),
+            'aria-current': on ? 'page' : undefined
+          }, it.label);
+        })),
+        h('div', { className: 'tt-topnav__end' },
+          h('label', { className: 'tt-topnav__search' },
+            h(Icon, { name: 'search', size: 18 }),
+            h('input', { type: 'search', placeholder: props.searchPlaceholder || 'Search movies, shows, people', 'aria-label': 'Search' }),
+            h('kbd', { 'aria-hidden': 'true' }, '/')),
+          h(hrefs.profile ? 'a' : 'span', {
+            className: cx('tt-topnav__me', props.active === 'profile' && 'tt-topnav__me--on'), href: hrefs.profile, 'aria-label': name + ', profile'
+          }, h('span', { className: 'tt-sidenav__avatar', 'aria-hidden': 'true' }, name.charAt(0)))
+        )
+      )
+    );
+  }
+
+  function SiteFooter(props) {
+    var hrefs = props.hrefs || {};
+    var col = function (title, items) {
+      return h('div', { className: 'tt-footer__col' },
+        h('span', { className: 'tt-footer__h' }, title),
+        items.map(function (it) { return h('a', { key: it[0], href: it[1] || '#', className: 'tt-footer__a' }, it[0]); }));
+    };
+    return h('footer', { className: 'tt-footer' },
+      h('div', { className: 'tt-footer__in', style: props.maxWidth ? { maxWidth: props.maxWidth } : undefined },
+        h('div', { className: 'tt-footer__top' },
+          h('div', { className: 'tt-footer__about' },
+            h('span', { className: 'tt-topnav__brand' },
+              h('span', { className: 'tt-sidenav__mark', 'aria-hidden': 'true' }, h(Icon, { name: 'play', size: 14, filled: true })), 'Watchlog'),
+            h('p', null, 'Track every show and movie you watch, on your phone and in the browser.')),
+          col('Browse', [['Movies', hrefs.movies], ['Shows', hrefs.shows], ['Watchlist', hrefs.watchlist], ['Lists', hrefs.lists]]),
+          col('Account', [['Profile', hrefs.profile], ['Settings', hrefs.settings], ['Export data', hrefs.settings], ['Switch profile', hrefs.profiles]]),
+          col('About', [['Privacy', '#'], ['Terms', '#'], ['Contact', '#']])),
+        h('div', { className: 'tt-footer__tmdb' },
+          h('span', { className: 'tt-footer__logo', role: 'img', 'aria-label': 'TMDB logo placeholder' }, 'TMDB logo'),
+          h('p', null, 'This app uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB. Each profile uses its own TMDB API key. Get a free one at ',
+            h('a', { href: 'https://www.themoviedb.org/settings/api' }, 'themoviedb.org'), '.'))
+      )
+    );
+  }
+
+  function LandscapeCard(props) {
+    var tag = props.href ? 'a' : 'div';
+    var hasProgress = props.total > 0;
+    return h(tag, { className: 'tt-land', href: props.href },
+      h('span', { className: 'tt-land__still' },
+        props.image ? h('img', { src: props.image, alt: '' }) : h('span', { className: 'tt-poster__ph', 'aria-hidden': 'true' }, initials(props.title || '')),
+        props.badge ? h('span', { className: 'tt-land__badge' }, props.badge) : null,
+        h('span', { className: 'tt-land__play', 'aria-hidden': 'true' }, h(Icon, { name: 'play', size: 18, filled: true })),
+        hasProgress ? h('span', { className: 'tt-land__bar' }, h('span', { style: { width: Math.round(100 * (props.watched || 0) / props.total) + '%' } })) : null),
+      h('span', { className: 'tt-land__title' }, props.title),
+      props.meta ? h('span', { className: 'tt-land__meta' }, props.meta) : null
+    );
+  }
+
+  function EpisodeRow(props) {
+    var _w = React.useState(!!props.watched);
+    var watched = _w[0];
+    var meta = [props.date, props.runtime].filter(Boolean).join(' • ');
+    return h('article', { className: cx('tt-eprow', watched && 'tt-eprow--watched') },
+      h('div', { className: 'tt-eprow__still' }, props.image ? h('img', { src: props.image, alt: '' }) : null,
+        h('span', { className: 'tt-eprow__num' }, 'E' + props.number)),
+      h('div', { className: 'tt-eprow__body' },
+        h('div', { className: 'tt-eprow__head' },
+          h('span', { className: 'tt-eprow__title' }, props.title),
+          meta ? h('span', { className: 'tt-eprow__meta' }, meta) : null),
+        props.synopsis ? h('p', { className: 'tt-eprow__text' }, props.synopsis) : null),
+      h('button', {
+        type: 'button', className: cx('tt-eprow__check', watched && 'tt-eprow__check--on'), 'aria-pressed': watched,
+        'aria-label': (watched ? 'Unmark ' : 'Mark ') + 'episode ' + props.number + ' as watched',
+        onClick: function () { _w[1](!watched); if (props.onToggle) props.onToggle(!watched); }
+      }, h(Icon, { name: 'eye', size: 18, filled: watched }), watched ? 'Watched' : 'Mark watched')
+    );
+  }
+
+  // One row in a settings-style card: label + sub on the left, one control on the right.
+  function SettingsRow(props) {
+    var kind = props.kind || 'link';
+    var tag = props.href ? 'a' : 'div';
+    var control = null;
+    if (kind === 'switch') control = h(Switch, { label: props.label, checked: props.checked, onChange: props.onChange });
+    else if (kind === 'button' || kind === 'danger') control = h('button', { type: 'button', className: 'tt-setrow__btn', onClick: props.onClick }, props.value);
+    else if (kind === 'link') control = h('span', { className: 'tt-setrow__value' }, props.value || null, h(Icon, { name: 'chevron', size: 18 }));
+    return h(tag, {
+      className: cx('tt-setrow', kind === 'danger' && 'tt-setrow--danger', props.disabled && 'tt-setrow--disabled'),
+      href: props.href, onClick: kind === 'link' && !props.href ? props.onClick : undefined
+    },
+      h('span', { className: 'tt-setrow__text' },
+        h('span', { className: 'tt-setrow__label' }, props.label),
+        props.sub ? h('span', { className: 'tt-setrow__sub' }, props.sub) : null),
+      props.badge ? h('span', { className: 'tt-badge' }, props.badge) : null,
+      control);
+  }
+
+  function SegmentedControl(props) {
+    var opts = props.options || [];
+    var _v = React.useState(props.value != null ? props.value : opts[0]);
+    var value = props.value != null && props.onChange ? props.value : _v[0];
+    return h('div', { className: 'tt-seg tt-seg--inline', role: 'group', 'aria-label': props.label },
+      opts.map(function (o) {
+        var on = o === value;
+        return h('button', { key: o, type: 'button', className: cx('tt-seg__item', on && 'tt-seg__item--on'), 'aria-pressed': on,
+          onClick: function () { _v[1](o); if (props.onChange) props.onChange(o); } }, o);
+      }));
+  }
+
+  function StatusPill(props) {
+    return h('span', { className: cx('tt-pill', 'tt-pill--' + (props.tone || 'success')) }, props.label);
+  }
+
+  function OptionCard(props) {
+    return h('button', { type: 'button', role: 'radio', 'aria-checked': !!props.selected,
+      className: cx('tt-option', props.selected && 'tt-option--on'), onClick: props.onClick },
+      h('span', { className: 'tt-option__dot', 'aria-hidden': 'true' }),
+      h('span', { className: 'tt-option__text' },
+        h('span', { className: 'tt-option__label' }, props.label),
+        props.description ? h('span', { className: 'tt-option__desc' }, props.description) : null));
+  }
+
   window.TVTracker = {
     Icon: Icon, Button: Button, SearchField: SearchField, SectionHeader: SectionHeader,
     BackButton: BackButton, PosterArt: PosterArt, PosterCard: PosterCard, MediaRow: MediaRow, AiringRow: AiringRow, CastCard: CastCard, Chip: Chip, Switch: Switch, TextField: TextField, BrowseHeader: BrowseHeader, ProgressBar: ProgressBar, SeasonRow: SeasonRow,
-    EpisodeCard: EpisodeCard, StatTile: StatTile, BottomNav: BottomNav, SideNav: SideNav
+    EpisodeCard: EpisodeCard, StatTile: StatTile, BottomNav: BottomNav, SideNav: SideNav, TopNav: TopNav, SiteFooter: SiteFooter, LandscapeCard: LandscapeCard, EpisodeRow: EpisodeRow, SettingsRow: SettingsRow, SegmentedControl: SegmentedControl, StatusPill: StatusPill, OptionCard: OptionCard
   };
 })();

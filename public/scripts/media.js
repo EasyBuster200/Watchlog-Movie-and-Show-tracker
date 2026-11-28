@@ -150,83 +150,248 @@ function markNativeApp() {
   document.documentElement.classList.toggle('is-native', native);
 }
 
-// The design's SideNav, which replaces the bottom bar on laptops (style.css shows one or the
-// other): the wordmark, a search field (Enter opens the search page), the six sections with
-// labels, and the profile with a settings button at the foot. Built next to the bottom nav by
-// renderBottomNav, so the two always agree on the active section.
-function renderSideNav(active) {
-  let side = document.querySelector('nav.tt-sidenav');
-  if (!side) {
-    side = el('nav', 'tt-sidenav');
-    side.setAttribute('aria-label', 'Main');
-    document.body.insertBefore(side, document.body.firstChild);
-    document.body.classList.add('has-sidenav');
-  }
-  side.innerHTML = '';
+// ---------- Browser shell (laptops; style.css shows it only there) ----------
+// The design's browser layout: TopNav across the top, SiteFooter at the bottom, breadcrumbs
+// instead of back buttons, and poster rows seven across with prev/next arrows. Built on every
+// page that has a bottom nav (renderBottomNav calls renderBrowserShell), so the header's current
+// section always matches the bottom bar's. On phones, tablets and in the Android app all of it
+// stays hidden and the page is unchanged.
 
-  const brand = el('a', 'tt-sidenav__brand');
-  brand.href = 'main.html';
+const BROWSER_SECTIONS = {
+  home: { label: 'Home', href: 'main.html' },
+  watchlist: { label: 'Watchlist', href: 'bookmarks.html' },
+  lists: { label: 'Lists', href: 'lists.html' },
+  movies: { label: 'Movies', href: 'movies.html' },
+  shows: { label: 'Shows', href: 'shows.html' },
+  profile: { label: 'Profile', href: 'profile.html' },
+};
+
+function brandMark(tag, className) {
+  const brand = el(tag, className);
   const mark = el('span', 'tt-sidenav__mark');
+  mark.setAttribute('aria-hidden', 'true');
   mark.innerHTML = ttIcon('play', { size: 14, filled: true });
   brand.appendChild(mark);
   brand.appendChild(document.createTextNode('Watchlog'));
-  side.appendChild(brand);
+  return brand;
+}
 
-  const form = el('form', 'tt-sidenav__search');
+// TopNav: wordmark, Home / Watchlist / Lists / Movies / Shows (the current one underlined), a
+// 300px search ("/" focuses it; Enter opens the search page) and the avatar for Profile.
+function buildTopNav(active) {
+  const header = el('header', 'tt-topnav');
+  const inner = el('div', 'tt-topnav__in');
+  const brand = brandMark('a', 'tt-topnav__brand');
+  brand.href = 'main.html';
+  inner.appendChild(brand);
+
+  const links = el('nav', 'tt-topnav__links');
+  links.setAttribute('aria-label', 'Main');
+  NAV_ITEMS.filter(item => item.id !== 'profile').forEach(item => {
+    const on = item.id === active;
+    const link = el('a', `tt-topnav__link${on ? ' tt-topnav__link--on' : ''}`, item.label);
+    link.href = item.href;
+    if (on) link.setAttribute('aria-current', 'page');
+    links.appendChild(link);
+  });
+  inner.appendChild(links);
+
+  const end = el('div', 'tt-topnav__end');
+  const form = el('form', 'tt-topnav__form');
   form.setAttribute('role', 'search');
-  const field = el('label', 'tt-search');
+  const field = el('label', 'tt-topnav__search');
   field.innerHTML = ttIcon('search', { size: 18 });
-  field.appendChild(el('span', 'tt-sr', 'Search'));
   const input = document.createElement('input');
   input.type = 'search';
-  input.placeholder = 'Search movies and shows…';
+  input.id = 'topnav-search';
+  input.placeholder = 'Search movies, shows, people';
+  input.setAttribute('aria-label', 'Search');
   input.autocomplete = 'off';
-  input.enterKeyHint = 'search';
   const current = new URLSearchParams(window.location.search).get('q');
   if (current && /search(\.html)?$/.test(window.location.pathname)) input.value = current;
   field.appendChild(input);
+  const kbd = el('kbd', null, '/');
+  kbd.setAttribute('aria-hidden', 'true');
+  field.appendChild(kbd);
   form.appendChild(field);
   form.addEventListener('submit', event => {
     event.preventDefault();
     const q = input.value.trim();
     if (q) window.location.href = `search.html?q=${encodeURIComponent(q)}`;
   });
-  side.appendChild(form);
-
-  const items = el('div', 'tt-sidenav__items');
-  NAV_ITEMS.forEach(item => {
-    const on = item.id === active;
-    const link = el('a', `tt-sidenav__item${on ? ' tt-sidenav__item--on' : ''}`);
-    link.href = item.href;
-    if (on) link.setAttribute('aria-current', 'page');
-    link.innerHTML = ttIcon(item.icon, { size: 20, strokeWidth: on ? 2 : 1.8 });
-    link.appendChild(document.createTextNode(item.label));
-    items.appendChild(link);
-  });
-  side.appendChild(items);
+  end.appendChild(form);
 
   const profile = typeof getActiveProfile === 'function' ? getActiveProfile() : null;
-  if (profile) {
-    const foot = el('div', 'tt-sidenav__foot');
-    const me = el('a', 'tt-sidenav__me');
-    me.href = 'profile.html';
-    me.appendChild(el('span', 'tt-sidenav__avatar', profile.displayName.trim().charAt(0).toUpperCase()));
-    me.appendChild(el('span', 'tt-sidenav__name', profile.displayName));
-    foot.appendChild(me);
-    const settings = el('a', 'tt-btn tt-btn--ghost tt-btn--icon tt-sidenav__settings');
-    settings.href = 'settings.html';
-    settings.setAttribute('aria-label', 'Settings');
-    settings.innerHTML = ttIcon('more', { size: 20 });
-    foot.appendChild(settings);
-    side.appendChild(foot);
+  const name = profile ? profile.displayName.trim() : '';
+  const me = el('a', `tt-topnav__me${active === 'profile' ? ' tt-topnav__me--on' : ''}`);
+  me.href = 'profile.html';
+  me.setAttribute('aria-label', name ? `${name}, profile` : 'Profile');
+  me.appendChild(el('span', 'tt-sidenav__avatar', name ? name.charAt(0).toUpperCase() : ''));
+  if (!name) me.querySelector('span').innerHTML = ttIcon('user', { size: 18 });
+  end.appendChild(me);
+  inner.appendChild(end);
+  header.appendChild(inner);
+  return header;
+}
+
+// SiteFooter: about blurb, Browse / Account / About columns, and the TMDB credit with TMDB's own
+// logo file. The design's About column has Privacy, Terms and Contact; the app has none of those
+// pages, so About links to the Licences page.
+function buildSiteFooter() {
+  const footer = el('footer', 'tt-footer');
+  const inner = el('div', 'tt-footer__in');
+  const top = el('div', 'tt-footer__top');
+  const about = el('div', 'tt-footer__about');
+  about.appendChild(brandMark('span', 'tt-topnav__brand'));
+  about.appendChild(el('p', null, 'Track every show and movie you watch, on your phone and in the browser.'));
+  top.appendChild(about);
+  const column = (title, items) => {
+    const col = el('div', 'tt-footer__col');
+    col.appendChild(el('span', 'tt-footer__h', title));
+    items.forEach(([label, href]) => {
+      const a = el('a', 'tt-footer__a', label);
+      a.href = href;
+      col.appendChild(a);
+    });
+    return col;
+  };
+  top.appendChild(column('Browse', [['Movies', 'movies.html'], ['Shows', 'shows.html'], ['Watchlist', 'bookmarks.html'], ['Lists', 'lists.html']]));
+  top.appendChild(column('Account', [['Profile', 'profile.html'], ['Settings', 'settings.html'], ['Export data', 'settings.html'], ['Switch profile', 'profile-picker.html']]));
+  top.appendChild(column('About', [['Licences', 'licences.html']]));
+  inner.appendChild(top);
+
+  const tmdb = el('div', 'tt-footer__tmdb');
+  const logo = el('a', 'tt-footer__logo');
+  logo.href = 'https://www.themoviedb.org/';
+  logo.target = '_blank';
+  logo.rel = 'noopener noreferrer';
+  const img = document.createElement('img');
+  img.src = 'images/tmdb-logo.svg';
+  img.alt = 'TMDB';
+  logo.appendChild(img);
+  tmdb.appendChild(logo);
+  const credit = el('p', null, 'This app uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB. Each profile uses its own TMDB API key. Get a free one at ');
+  const link = el('a', null, 'themoviedb.org');
+  link.href = 'https://www.themoviedb.org/settings/api';
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  credit.appendChild(link);
+  credit.appendChild(document.createTextNode('.'));
+  tmdb.appendChild(credit);
+  inner.appendChild(tmdb);
+  footer.appendChild(inner);
+  return footer;
+}
+
+// Breadcrumbs replace the back button in the browser: the section, then this page (its <h1>,
+// else the document title), with Home first on catalogue pages (Movies, Shows, search), as
+// drawn ("Home / Shows / Harbour Lights", "Profile / Settings"). Put where the back button's
+// row is; the back button itself is hidden on laptops.
+function pageTitleForCrumbs() {
+  const h1 = document.querySelector('main h1');
+  const text = h1 ? h1.textContent.trim() : '';
+  return text || document.title.replace(/\s*[·|-]\s*Watchlog$/, '').trim();
+}
+
+function renderBreadcrumbs(active) {
+  const back = document.querySelector('[data-back]');
+  if (!back) return;
+  // Pages that change their section later (detail, see-all) render again: start over.
+  const old = document.querySelector('.tt-crumbs');
+  if (old) old.remove();
+  const trail = [];
+  const section = BROWSER_SECTIONS[active];
+  if (!section || active === 'movies' || active === 'shows') trail.push(BROWSER_SECTIONS.home);
+  if (section && active !== 'home') trail.push(section);
+
+  const crumbs = el('nav', 'tt-crumbs');
+  crumbs.setAttribute('aria-label', 'Breadcrumb');
+  trail.forEach(step => {
+    const a = el('a', null, step.label);
+    a.href = step.href;
+    crumbs.appendChild(a);
+    crumbs.appendChild(el('span', 'tt-crumbs__sep', '/'));
+  });
+  const here = el('span', 'tt-crumbs__here');
+  here.setAttribute('aria-current', 'page');
+  crumbs.appendChild(here);
+  const setHere = () => { here.textContent = pageTitleForCrumbs(); };
+  setHere();
+  // Detail pages fill their title once TMDB answers.
+  const h1 = document.querySelector('main h1');
+  if (h1) new MutationObserver(setHere).observe(h1, { childList: true, characterData: true, subtree: true });
+
+  const host = back.parentElement;
+  if (host.classList.contains('detail-hero') || getComputedStyle(back).position === 'absolute') {
+    crumbs.classList.add('tt-crumbs--over');
+    host.insertBefore(crumbs, back);
+  } else {
+    host.parentElement.insertBefore(crumbs, host);
   }
 }
 
+// Seven posters at a time, with prev/next arrows on the right of the row's section title
+// (after "See all"). The row scrolls by a page; an arrow greys out at its end.
+function addPosterRowArrows(row) {
+  if (!row || row.dataset.arrows) return;
+  const head = row.previousElementSibling;
+  if (!head || !head.classList.contains('tt-section')) return;
+  row.dataset.arrows = '1';
+  const arrows = el('div', 'tt-arrows');
+  const make = (dir, label, icon) => {
+    const b = el('button', 'tt-arrow');
+    b.type = 'button';
+    b.setAttribute('aria-label', label);
+    b.innerHTML = ttIcon(icon, { size: 16, strokeWidth: 2 });
+    b.addEventListener('click', () => {
+      if (b.getAttribute('aria-disabled') === 'true') return;
+      row.scrollBy({ left: dir * (row.clientWidth + 20), behavior: 'smooth' });
+    });
+    arrows.appendChild(b);
+    return b;
+  };
+  const prev = make(-1, 'Previous', 'chevron-left');
+  const next = make(1, 'Next', 'chevron');
+  const sync = () => {
+    prev.setAttribute('aria-disabled', row.scrollLeft <= 2 ? 'true' : 'false');
+    next.setAttribute('aria-disabled', row.scrollLeft + row.clientWidth >= row.scrollWidth - 2 ? 'true' : 'false');
+  };
+  row.addEventListener('scroll', sync, { passive: true });
+  new MutationObserver(sync).observe(row, { childList: true });
+  window.addEventListener('resize', sync);
+  sync();
+  head.appendChild(arrows);
+}
+
+function renderBrowserShell(active) {
+  if (!document.querySelector('header.tt-topnav')) {
+    document.body.insertBefore(buildTopNav(active), document.body.firstChild);
+    document.body.appendChild(buildSiteFooter());
+    document.body.classList.add('has-shell');
+    // "/" jumps to the search field (not while typing somewhere).
+    document.addEventListener('keydown', event => {
+      if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) return;
+      const t = event.target;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      const search = document.getElementById('topnav-search');
+      if (search && search.offsetParent) {
+        event.preventDefault();
+        search.focus();
+      }
+    });
+  } else {
+    const old = document.querySelector('header.tt-topnav');
+    old.replaceWith(buildTopNav(active));
+  }
+  renderBreadcrumbs(active);
+  document.querySelectorAll('.poster-row').forEach(addPosterRowArrows);
+}
+
 // Every page has an empty <nav class="tt-nav" data-active="..."> - filled in here so the six
-// icons are defined once. It also (re)builds the laptop sidebar to match.
+// icons are defined once. It also builds the laptop shell (top bar, footer, breadcrumbs) to match.
 function renderBottomNav(nav) {
   const active = nav.dataset.active;
-  renderSideNav(active);
+  renderBrowserShell(active);
   nav.setAttribute('aria-label', 'Main');
   nav.innerHTML = '';
   NAV_ITEMS.forEach(item => {
