@@ -430,18 +430,22 @@ function renderSignIn({ restore = null } = {}) {
   authEl.appendChild(backButton(() => show(restore ? 'restore' : 'home')));
   authEl.appendChild(authHead({
     title: 'Welcome back',
-    text: restore ? 'Sign in, and the backup is restored into your account on this device.' : 'Sign in with your account key.',
+    text: restore ? 'Sign in, and the backup is restored into your account on this device.' : 'Sign in with your account key to sync your shows, movies and lists.',
     centred: true,
   }));
   const form = el('form', 'auth__form');
   form.noValidate = true;
   const keyField = buildTextField({
     label: 'Account key', type: 'password', icon: 'lock', placeholder: 'XXXX-XXXX-…', autocomplete: 'off',
-    aside: linkButton('Lost your key?', () => show('recover')),
   });
   keyField.input.spellcheck = false;
   keyField.input.autocapitalize = 'characters';
-  form.appendChild(keyField);
+  // "Lost your key?" sits under the field, on the right (the design's SignIn).
+  const keyBlock = el('div', 'auth__field-block');
+  const lost = linkButton('Lost your key?', () => show('recover'));
+  lost.classList.add('auth__lost');
+  keyBlock.append(keyField, lost);
+  form.appendChild(keyBlock);
   const error = errorLine();
   form.appendChild(error);
   const submit = button('Sign in', 'primary', null, { type: 'submit' });
@@ -979,9 +983,10 @@ const SCREENS = {
 // of a split layout with a mosaic of posters on the left (the design's browser layout). The
 // posters are this week's trending movies from the server (GET /v1/posters: just poster paths,
 // no sign-in needed), loaded from TMDB's image server. Without them (offline, the server's TMDB
-// switch off) the mosaic shows plain tiles instead.
-const MOSAIC_TILES = 24;
-
+// switch off) the mosaic shows plain tiles instead. As drawn: four columns of four posters,
+// each column staggered, tilted, under a fade, with the wordmark and a line about the app.
+const MOSAIC_COLUMNS = [0, -90, -40, -130];
+const MOSAIC_PER_COLUMN = 4;
 
 async function fillPosterMosaic() {
   const mosaic = document.getElementById('auth-mosaic');
@@ -992,22 +997,37 @@ async function fillPosterMosaic() {
     const response = await fetch(`${serverBaseUrl()}/v1/posters`);
     if (response.ok) posters = ((await response.json()).posters || []).filter(p => typeof p === 'string');
   } catch (error) { /* offline: plain tiles */ }
-  const grid = el('div', 'auth__mosaic-grid');
-  for (let i = 0; i < MOSAIC_TILES; i++) {
-    const tile = el('div', 'auth__mosaic-tile');
-    const path = posters.length ? posters[i % posters.length] : null;
-    if (path) {
-      const img = document.createElement('img');
-      img.src = `https://image.tmdb.org/t/p/w342${path}`;
-      img.alt = '';
-      img.loading = 'lazy';
-      img.decoding = 'async';
-      img.addEventListener('error', () => img.remove());
-      tile.appendChild(img);
+  const art = el('div', 'auth__mosaic-art');
+  art.setAttribute('aria-hidden', 'true');
+  let n = 0;
+  MOSAIC_COLUMNS.forEach(offset => {
+    const column = el('div', 'auth__mosaic-col');
+    column.style.marginTop = `${offset}px`;
+    for (let i = 0; i < MOSAIC_PER_COLUMN; i++, n++) {
+      const tile = el('div', 'auth__mosaic-tile');
+      const path = posters.length ? posters[n % posters.length] : null;
+      if (path) {
+        const img = document.createElement('img');
+        img.src = `https://image.tmdb.org/t/p/w342${path}`;
+        img.alt = '';
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        img.addEventListener('error', () => img.remove());
+        tile.appendChild(img);
+      }
+      column.appendChild(tile);
     }
-    grid.appendChild(tile);
-  }
-  mosaic.appendChild(grid);
+    art.appendChild(column);
+  });
+  const fade = el('div', 'auth__mosaic-fade');
+  fade.setAttribute('aria-hidden', 'true');
+  const pitch = el('div', 'auth__pitch');
+  pitch.appendChild(brandMark('span', 'auth__brand'));
+  pitch.appendChild(el('h2', null, 'Every show and movie you watch, in one place.'));
+  pitch.appendChild(el('p', null, 'Track episodes, keep a watchlist and see what airs next across your phone and browser.'));
+  // The tiles are decoration (hidden above); the wordmark and the line are read out.
+  mosaic.removeAttribute('aria-hidden');
+  mosaic.append(art, fade, pitch);
 }
 
 fillPosterMosaic();
