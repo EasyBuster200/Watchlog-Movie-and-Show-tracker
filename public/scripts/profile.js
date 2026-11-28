@@ -22,6 +22,148 @@ function renderHeader(user) {
 async function loadStats() {
   const stats = await fetchJson('/api/stats');
   renderStatTiles(document.getElementById('stats-grid'), stats, { layout: 'profile' });
+  if (webProfile) fillWebStats(stats);
+}
+
+// ---------- Laptops: the design's WebProfile ----------
+// A header band (avatar, name, since when and the backup state, Export data and Settings, a
+// stats strip, tabs to the full lists), then watch time per month and top genres side by side.
+// The phone's card, Friends row and stat tiles are .phone-only; the poster rows are shared.
+let webProfile = null;
+
+const WEB_PROFILE_TABS = [
+  ['Overview', 'profile.html'],
+  ['Movies', 'media-list.html?source=watched&type=movie'],
+  ['Shows', 'media-list.html?source=watched&type=tv'],
+  ['Favourites', 'media-list.html?source=favorites&type=movie'],
+  ['Lists', 'lists.html'],
+];
+
+function buildWebProfile(user) {
+  const root = document.getElementById('web-profile');
+  const inner = el('div', 'web-profile__in');
+  const head = el('div', 'web-profile__head');
+  head.appendChild(el('span', 'web-profile__avatar', user.displayName.trim().charAt(0).toUpperCase()));
+  const titles = el('div', 'web-profile__titles');
+  titles.appendChild(el('h2', 'web-profile__name', user.displayName));
+  const meta = el('span', 'web-profile__meta');
+  const since = new Date(user.createdAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  meta.appendChild(el('span', null, `${user.account ? 'Online account' : 'Offline profile'} since ${since}`));
+  const backup = el('span', 'web-profile__backup');
+  meta.appendChild(backup);
+  titles.appendChild(meta);
+  head.appendChild(titles);
+
+  const actions = el('div', 'web-profile__actions');
+  const exportBtn = el('button', 'tt-btn tt-btn--secondary', 'Export data');
+  exportBtn.type = 'button';
+  exportBtn.addEventListener('click', async () => {
+    exportBtn.disabled = true;
+    try {
+      if (await exportBackup(user)) renderAutoBackupStatus(user);
+    } catch (error) {
+      console.error('Backup export failed:', error);
+      await confirmDialog({ title: 'Export failed', message: 'Something went wrong creating the backup file.', confirmLabel: 'OK', cancelLabel: 'Close' });
+    }
+    exportBtn.disabled = false;
+  });
+  const settings = el('a', 'tt-btn tt-btn--secondary', 'Settings');
+  settings.href = 'settings.html';
+  actions.append(exportBtn, settings);
+  head.appendChild(actions);
+  inner.appendChild(head);
+
+  const stats = el('div', 'web-profile__stats');
+  inner.appendChild(stats);
+
+  const tabs = el('nav', 'web-profile__tabs');
+  tabs.setAttribute('aria-label', 'Profile sections');
+  WEB_PROFILE_TABS.forEach(([label, href], i) => {
+    const a = el('a', i === 0 ? 'web-profile__tab web-profile__tab--on' : 'web-profile__tab', label);
+    a.href = href;
+    if (i === 0) a.setAttribute('aria-current', 'page');
+    tabs.appendChild(a);
+  });
+  inner.appendChild(tabs);
+  root.appendChild(inner);
+
+  const charts = el('div', 'web-profile__charts web-only');
+  const months = el('section', 'web-profile__card');
+  const monthsHead = el('div', 'web-profile__card-head');
+  monthsHead.append(el('h2', null, 'Watch time per month'), el('span', null, 'Hours, last 12 months'));
+  const chart = el('div', 'web-month-chart');
+  chart.setAttribute('role', 'img');
+  months.append(monthsHead, chart);
+  const genres = el('section', 'web-profile__card');
+  genres.appendChild(el('h2', null, 'Top genres'));
+  const genreList = el('div', 'web-genres');
+  genres.appendChild(genreList);
+  charts.append(months, genres);
+  root.after(charts);
+
+  webProfile = { backup, stats, chart, genreList };
+}
+
+function fillWebStats(stats) {
+  webProfile.stats.innerHTML = '';
+  [
+    [stats.moviesWatched, 'Movies'],
+    [stats.showsTracked, 'Shows'],
+    [stats.episodesWatched, 'Episodes'],
+    [formatWatchTime(stats.totalWatchMinutes).replace('D', 'd'), 'Watch time'],
+    [stats.favorites, 'Favourites'],
+  ].forEach(([value, label]) => {
+    const stat = el('div', 'web-profile__stat');
+    stat.append(el('span', 'web-profile__stat-value', typeof value === 'number' ? value.toLocaleString() : value), el('span', null, label));
+    webProfile.stats.appendChild(stat);
+  });
+}
+
+function monthName(month, options) {
+  return parseLocalDate(`${month}-01`).toLocaleDateString(undefined, options);
+}
+
+async function loadWebCharts() {
+  const { chart, genreList } = webProfile;
+  try {
+    const details = await fetchJson('/api/stats/details');
+    const hours = details.monthly.map(m => m.minutes / 60);
+    const max = Math.max(...hours, 1);
+    chart.innerHTML = '';
+    if (hours.every(h => h === 0)) {
+      chart.appendChild(el('p', 'muted-note', 'Nothing watched in the last 12 months yet.'));
+    } else {
+      const peak = details.monthly[hours.indexOf(Math.max(...hours))];
+      chart.setAttribute('aria-label', `Bar chart of hours watched per month, peaking at ${Math.round(max)} hours in ${monthName(peak.month, { month: 'long' })}`);
+      details.monthly.forEach(({ month }, i) => {
+        const col = el('div', i === hours.length - 1 ? 'web-month web-month--current' : 'web-month');
+        col.title = `${monthName(month, { month: 'long', year: 'numeric' })}: ${Math.round(hours[i] * 10) / 10}h`;
+        col.appendChild(el('span', 'web-month__value', String(Math.round(hours[i]))));
+        const fill = el('div', 'web-month__fill');
+        fill.style.height = `${Math.round((hours[i] / max) * 170)}px`;
+        col.appendChild(fill);
+        col.appendChild(el('span', 'web-month__label', monthName(month, { month: 'short' })));
+        chart.appendChild(col);
+      });
+    }
+    genreList.innerHTML = '';
+    const top = details.genres.slice(0, 5);
+    if (!top.length) genreList.appendChild(el('p', 'muted-note', 'Watch something to see your top genres.'));
+    const most = Math.max(...top.map(g => g.count), 1);
+    top.forEach(g => {
+      const row = el('div', 'web-genre');
+      const track = el('div', 'web-genre__track');
+      const fill = el('div', 'web-genre__fill');
+      fill.style.width = `${(g.count / most) * 100}%`;
+      track.appendChild(fill);
+      row.append(el('span', 'web-genre__name', g.name), track, el('span', 'web-genre__count', String(g.count)));
+      genreList.appendChild(row);
+    });
+  } catch (error) {
+    console.error('Failed to load stats details:', error);
+    chart.innerHTML = '';
+    chart.appendChild(el('p', 'muted-note', "Couldn't load these stats."));
+  }
 }
 
 // Each preview shows at most this many. Watched Shows costs a TMDB lookup per show (it needs
@@ -62,6 +204,15 @@ async function refreshAll() {
 
 // The status row under the profile: last backup and where it went, or what went wrong.
 function showBackupStatus(title, detail, { warning = false } = {}) {
+  if (webProfile) {
+    webProfile.backup.innerHTML = '';
+    webProfile.backup.classList.toggle('is-warning', warning);
+    webProfile.backup.appendChild(el('span', 'web-profile__dot', '·'));
+    const icon = el('span', 'web-profile__backup-icon');
+    icon.innerHTML = ttIcon('cloud', { size: 16 });
+    webProfile.backup.append(icon, el('span', null, title));
+    webProfile.backup.title = detail || '';
+  }
   document.getElementById('backup-status').hidden = false;
   document.getElementById('backup-status-title').textContent = title;
   document.getElementById('backup-status-detail').textContent = detail || '';
@@ -129,6 +280,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!user) return;
 
   renderHeader(user);
+  if (isLaptopLayout()) {
+    buildWebProfile(user);
+    loadWebCharts();
+  }
   renderFriendsLink(user);
   renderAutoBackupStatus(user);
   // The page-load run (autoBackup.js) may finish after this renders - refresh once it has.

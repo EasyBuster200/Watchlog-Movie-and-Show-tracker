@@ -34,7 +34,7 @@
   <script type="text/javascript" src="scripts/settings.js" defer></script>
 </head>
 <body>
-  <main class="screen">
+  <main class="screen settings-screen">
     <div class="page-header__row">
       <button type="button" class="tt-back" data-back="profile.html" aria-label="Back to Profile">
         <svg class="tt-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg>
@@ -42,20 +42,39 @@
       <h1 class="screen-title">Settings</h1>
     </div>
 
-    <button type="button" class="settings-profile" id="settings-profile">
+    <div class="settings-layout">
+    <nav class="settings-nav web-only" id="settings-nav" aria-label="Settings sections">
+      <a href="#profile">Profile</a><a href="#appearance">Appearance</a><a href="#notifications">Notifications</a><a href="#library">Library</a><a href="#data">Data &amp; backup</a><a href="#online">Online account</a><a href="#account">Account</a><a href="#about">About</a>
+    </nav>
+    <div class="settings-main">
+    <section class="settings-section web-only" id="profile">
+      <div class="settings-card settings-webprofile">
+        <span class="settings-webprofile__avatar" id="settings-web-avatar" aria-hidden="true"></span>
+        <span class="settings-profile__text">
+          <span class="settings-webprofile__name" id="settings-web-name"></span>
+          <span class="settings-row__sub" id="settings-web-sub"></span>
+        </span>
+        <button type="button" class="settings-row__btn" id="settings-web-edit">Edit name and TMDB token</button>
+      </div>
+    </section>
+
+    <button type="button" class="settings-profile phone-only" id="settings-profile">
       <span class="settings-profile__avatar" id="settings-avatar" aria-hidden="true"></span>
       <span class="settings-profile__text">
         <span class="settings-profile__name" id="settings-name"></span>
-        <span class="settings-profile__sub">Local profile · Edit name and TMDB token</span>
+        <span class="settings-profile__sub" id="settings-profile-sub"></span>
       </span>
       <span class="list-row__chevron"><svg class="tt-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></span>
     </button>
 
-    <section class="settings-section">
-      <span class="tt-filter-label">Appearance</span>
+    <section class="settings-section" id="appearance">
+      <h2 class="tt-filter-label settings-section__title">Appearance</h2>
       <div class="settings-card">
         <div class="settings-block">
-          <span class="settings-block__title">Theme</span>
+          <div class="settings-block__head">
+            <span class="settings-block__title">Theme</span>
+            <span class="muted-note web-only">Dark, light, or whatever your device uses</span>
+          </div>
           <div class="chip-wrap" role="group" aria-label="Theme" id="theme-chips"></div>
         </div>
         <div class="settings-block">
@@ -71,6 +90,8 @@
     <div id="settings-sections"></div>
 
     <span class="app-version" id="app-version">Watchlog</span>
+    </div>
+    </div>
     <input type="file" id="import-app-input" accept="application/json" hidden>
   </main>
   <nav class="tt-nav" data-active="profile"></nav>

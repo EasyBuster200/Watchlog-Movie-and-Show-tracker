@@ -6,9 +6,17 @@
 // Sections: notifications on this device (Web Push), sign-up requests (approve / decline),
 // numbers, the sign-up mode, invites, users (sign out, suspend, delete), the TMDB proxy's switch
 // and daily cap, and the activity log. People's libraries are never shown: counts only.
+//
+// Two layouts from the same pieces (the design's Admin and WebAdmin): one column on phones;
+// on laptops (media.js's isLaptopLayout) the browser shell, a stats strip, then requests,
+// accounts and activity as tables in the main column, and the sign-up mode (option cards),
+// invites, TMDB and this device in a 360px side column.
 
 const adminEl = document.getElementById('admin');
 let adminProfile = null;
+let web = false;
+// The account whose Manage row is open, kept across re-renders.
+let openUserId = null;
 
 const SIGNUP_MODE_TEXT = {
   closed: ['Closed', 'Nobody new can make an account.'],
@@ -33,17 +41,25 @@ function when(iso) {
   if (minutes < 60) return `${minutes} min ago`;
   const hours = Math.round(minutes / 60);
   if (hours < 24) return `${hours} h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return days === 1 ? '1 day ago' : `${days} days ago`;
   return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+function count(n) {
+  return Number(n || 0).toLocaleString();
+}
+
+// A titled section with a card. Not added to the page: render() places it.
 function section(title, id = null) {
   const wrap = el('section', 'settings-section');
   if (id) wrap.id = id;
-  wrap.appendChild(el('span', 'tt-filter-label', title));
+  const head = el('div', 'admin-section__head');
+  head.appendChild(el('h2', 'tt-filter-label settings-section__title', title));
+  wrap.appendChild(head);
   const card = el('div', 'settings-card');
   wrap.appendChild(card);
-  adminEl.appendChild(wrap);
-  return card;
+  return { wrap, head, card };
 }
 
 function row(label, sub = null, actions = []) {
@@ -60,8 +76,9 @@ function row(label, sub = null, actions = []) {
   return r;
 }
 
+// `variant`: 'pill' (the small round SettingsRow button), 'secondary', 'primary' or 'danger'.
 function smallButton(label, variant, onClick) {
-  const b = el('button', `tt-btn tt-btn--${variant} admin-btn`, label);
+  const b = el('button', variant === 'pill' ? 'settings-row__btn' : `admin-btn admin-btn--${variant}`, label);
   b.type = 'button';
   b.addEventListener('click', async () => {
     b.disabled = true;
@@ -115,22 +132,24 @@ async function findAdminProfile() {
 // The helpers (webPushSupported, setDevicePush, ...) are in serverApi.js, shared with Settings,
 // where the same device turns on episode, release and recap notifications.
 
-async function renderPush(card, serverHasPush) {
+function renderPush(serverHasPush) {
+  const { wrap, card } = section('This device');
   if (!serverHasPush) {
     card.appendChild(row('Notifications', 'Not set up on the server yet (the VAPID keys, see docs/DEVELOPMENT.md).'));
-    return;
+    return wrap;
   }
   if (!webPushSupported()) {
     card.appendChild(row('Notifications', isNativeAppPlatform()
       ? "The Android app can't get these yet. Open the admin page in a browser, or add Watchlog to an iPhone's Home Screen."
       : "This browser can't receive push notifications."));
-    return;
+    return wrap;
   }
   if (onIphoneBrowserTab()) {
     card.appendChild(row('Notifications', 'On iPhone, add Watchlog to the Home Screen (Share → Add to Home Screen) and open the admin page from there.'));
-    return;
+    return wrap;
   }
   const subscribed = devicePushKinds(adminProfile).requests && Notification.permission === 'granted';
+  const label = web ? 'Notify me here' : 'Notify me on this device';
   const sw = buildSwitch('Notify me on this device', subscribed, async on => {
     try {
       await setDevicePush(adminProfile, { requests: on });
@@ -139,10 +158,10 @@ async function renderPush(card, serverHasPush) {
       await confirmDialog({ title: "Couldn't change notifications", message: err.message || 'Try again.', confirmLabel: 'OK' });
     }
   });
-  const r = row('Notify me on this device', 'When someone asks to join');
+  const r = row(label, 'When someone asks to join');
   r.appendChild(sw);
   card.appendChild(r);
-  card.appendChild(row('Send a test', null, [smallButton('Send', 'secondary', async () => {
+  card.appendChild(row('Send a test', null, [smallButton('Send', 'pill', async () => {
     try {
       const result = await accountRequest(adminProfile, 'POST', '/v1/push/test');
       await confirmDialog({ title: 'Test sent', message: result.sent ? `Sent to ${result.sent} device${result.sent === 1 ? '' : 's'}.` : 'No device has notifications on yet.', confirmLabel: 'OK' });
@@ -150,61 +169,117 @@ async function renderPush(card, serverHasPush) {
       await confirmDialog({ title: "Couldn't send", message: err.message, confirmLabel: 'OK' });
     }
   })]));
+  return wrap;
 }
 
 // ---------- Sections ----------
 
 function renderRequests(users) {
   const pending = users.filter(u => u.status === 'pending');
-  const card = section(pending.length ? `Asking to join (${pending.length})` : 'Asking to join', 'requests');
+  const { wrap, card } = section(pending.length ? `Asking to join (${pending.length})` : 'Asking to join', 'requests');
   if (!pending.length) {
-    card.appendChild(row('Nobody is waiting', null));
-    return;
+    card.appendChild(row(web ? 'Nobody is waiting. New requests show up here, and on this device if notifications are on.' : 'Nobody is waiting', null));
+    card.lastChild.classList.add('admin-row--quiet');
+    return wrap;
   }
   pending.forEach(user => {
     const sub = [user.requestNote ? `"${user.requestNote}"` : 'No note', `asked ${when(user.createdAt)}`].join(' · ');
-    card.appendChild(row(user.displayName, sub, [
+    const r = row(user.displayName, sub, [
       smallButton('Decline', 'secondary', () => act(async () => {
         const ok = await confirmDialog({ title: `Decline ${user.displayName}?`, message: 'Their request is deleted. They can ask again.', confirmLabel: 'Decline', danger: true });
         if (ok) await adminRequest('DELETE', `/users/${user.id}`);
       })),
       smallButton('Approve', 'primary', () => act(() => adminRequest('POST', `/users/${user.id}/approve`))),
-    ]));
+    ]);
+    r.classList.add('admin-request');
+    const avatar = el('span', 'admin-request__avatar web-only', '?');
+    avatar.setAttribute('aria-hidden', 'true');
+    r.insertBefore(avatar, r.firstChild);
+    card.appendChild(r);
   });
+  return wrap;
 }
 
-function renderNumbers(overview) {
-  const wrap = el('section', 'settings-section');
-  wrap.appendChild(el('span', 'tt-filter-label', 'At a glance'));
-  const grid = el('div', 'stat-grid');
-  grid.appendChild(buildStatTile(overview.accounts.active, 'Accounts'));
-  grid.appendChild(buildStatTile(overview.activeLast7Days, 'Active this week'));
-  grid.appendChild(buildStatTile(overview.devices, 'Signed-in devices'));
-  grid.appendChild(buildStatTile(`${overview.tmdbToday}`, `TMDB today (cap ${overview.settings.tmdbDailyCap})`, { wide: true }));
-  grid.appendChild(buildStatTile(overview.syncRecords, 'Synced records'));
-  wrap.appendChild(grid);
+function backupNote(overview) {
   const backup = overview.lastBackup
-    ? `Last backup: ${overview.lastBackup.at ? when(overview.lastBackup.at) : overview.lastBackup.key}`
+    ? `Last backup: ${overview.lastBackup.at ? when(overview.lastBackup.at) : overview.lastBackup.key}${web ? ' (Sundays 03:00 UTC)' : ''}`
     : 'No backup yet (Sundays 03:00 UTC)';
-  wrap.appendChild(el('p', 'settings-row__sub admin-note', `${backup}${overview.accounts.suspended ? ` · ${overview.accounts.suspended} suspended` : ''}`));
-  adminEl.appendChild(wrap);
+  return `${backup}${overview.accounts.suspended ? ` · ${overview.accounts.suspended} suspended` : ''}`;
 }
 
+// Phone: StatTiles. Laptop: one card of five numbers, TMDB use with a progress bar.
+function renderNumbers(overview) {
+  const cap = overview.settings.tmdbDailyCap;
+  if (web) {
+    const wrap = el('div', 'admin-glance');
+    const strip = el('section', 'settings-card admin-stats');
+    strip.setAttribute('aria-label', 'At a glance');
+    const stat = (value, label) => {
+      const s = el('div', 'admin-stat');
+      s.append(el('b', null, value), el('span', null, label));
+      strip.appendChild(s);
+      return s;
+    };
+    stat(count(overview.accounts.active), 'Accounts');
+    stat(count(overview.activeLast7Days), 'Active this week');
+    stat(count(overview.devices), 'Signed-in devices');
+    const tmdb = stat(count(overview.tmdbToday), `TMDB today · cap ${count(cap)}`);
+    const bar = buildProgressBar(overview.tmdbToday, cap, 'TMDB requests today');
+    bar.classList.add('admin-stat__bar');
+    tmdb.appendChild(bar);
+    stat(count(overview.syncRecords), 'Synced records');
+    wrap.appendChild(strip);
+    wrap.appendChild(el('p', 'admin-note', backupNote(overview)));
+    return wrap;
+  }
+  const wrap = el('section', 'settings-section');
+  wrap.appendChild(el('h2', 'tt-filter-label settings-section__title', 'At a glance'));
+  const grid = el('div', 'stat-grid admin-tiles');
+  grid.appendChild(buildStatTile(count(overview.accounts.active), 'Accounts'));
+  grid.appendChild(buildStatTile(count(overview.activeLast7Days), 'Active this week'));
+  grid.appendChild(buildStatTile(count(overview.devices), 'Signed-in devices'));
+  grid.appendChild(buildStatTile(count(overview.syncRecords), 'Synced records'));
+  grid.appendChild(buildStatTile(count(overview.tmdbToday), `TMDB today (cap ${cap})`, { wide: true }));
+  wrap.appendChild(grid);
+  wrap.appendChild(el('p', 'settings-row__sub admin-note', backupNote(overview)));
+  return wrap;
+}
+
+// Phone: chips and the chosen mode's description. Laptop: OptionCards.
 function renderSignupMode(settings) {
-  const card = section('Who can join');
+  const { wrap, card } = section('Who can join');
+  const pick = mode => act(() => adminRequest('PATCH', '/settings', { signupMode: mode }));
+  if (web) {
+    card.classList.add('admin-modes');
+    card.setAttribute('role', 'radiogroup');
+    card.setAttribute('aria-label', 'Sign-up mode');
+    Object.entries(SIGNUP_MODE_TEXT).forEach(([mode, [label, text]]) => {
+      const on = settings.signupMode === mode;
+      const option = el('button', `tt-option${on ? ' tt-option--on' : ''}`);
+      option.type = 'button';
+      option.setAttribute('role', 'radio');
+      option.setAttribute('aria-checked', on ? 'true' : 'false');
+      const dot = el('span', 'tt-option__dot');
+      dot.setAttribute('aria-hidden', 'true');
+      const words = el('span', 'tt-option__text');
+      words.append(el('span', 'tt-option__label', label), el('span', 'tt-option__desc', text));
+      option.append(dot, words);
+      if (!on) option.addEventListener('click', () => pick(mode));
+      card.appendChild(option);
+    });
+    return wrap;
+  }
   const block = el('div', 'settings-block');
   const chips = el('div', 'chip-wrap');
   chips.setAttribute('role', 'group');
   chips.setAttribute('aria-label', 'Sign-up mode');
   Object.entries(SIGNUP_MODE_TEXT).forEach(([mode, [label]]) => {
-    chips.appendChild(buildChip(label, {
-      selected: settings.signupMode === mode,
-      onClick: () => act(() => adminRequest('PATCH', '/settings', { signupMode: mode })),
-    }));
+    chips.appendChild(buildChip(label, { selected: settings.signupMode === mode, onClick: () => pick(mode) }));
   });
   block.appendChild(chips);
-  block.appendChild(el('p', 'settings-row__sub', SIGNUP_MODE_TEXT[settings.signupMode][1]));
+  block.appendChild(el('p', 'settings-row__sub admin-mode-text', SIGNUP_MODE_TEXT[settings.signupMode][1]));
   card.appendChild(block);
+  return wrap;
 }
 
 function inviteStatus(invite) {
@@ -236,31 +311,33 @@ async function newInvite() {
   modal.appendChild(actions);
 }
 
+// The codes are stored hashed, so an invite can only be copied when it's made (newInvite);
+// the list offers Cancel only.
 function renderInvites(invites) {
-  const card = section('Invites');
-  card.appendChild(row('New invite', 'A single-use code that lets someone straight in', [smallButton('Make one', 'primary', newInvite)]));
-  invites.slice(0, 30).forEach(invite => {
+  const { wrap, head, card } = section('Invites');
+  if (web) {
+    head.appendChild(smallButton('New invite', 'primary', newInvite));
+  } else {
+    card.appendChild(row('New invite', 'A single-use code that lets someone straight in', [smallButton('Make one', 'primary', newInvite)]));
+  }
+  const shown = invites.slice(0, 30);
+  shown.forEach(invite => {
     const unused = !invite.usedAt && Date.parse(invite.expiresAt) > Date.now();
     card.appendChild(row(invite.note || 'Invite', inviteStatus(invite), unused ? [
-      smallButton('Cancel', 'secondary', () => act(() => adminRequest('DELETE', `/invites/${invite.id}`))),
+      smallButton('Cancel', 'pill', () => act(() => adminRequest('DELETE', `/invites/${invite.id}`))),
     ] : []));
   });
+  if (web) {
+    if (!shown.length) card.appendChild(row('No invites yet', null));
+    wrap.appendChild(el('p', 'admin-note', 'Single-use codes that let someone straight in. They expire after 7 days.'));
+  }
+  return wrap;
 }
 
-const STATUS_LABEL = { active: null, pending: 'waiting', suspended: 'suspended' };
-
-async function userMenu(user) {
-  const { overlay, modal } = openDialog();
-  modal.appendChild(el('h2', null, user.displayName));
-  modal.appendChild(el('p', null, `Joined ${when(user.createdAt)} · last seen ${when(user.lastSeen)} · ${user.devices} device${user.devices === 1 ? '' : 's'} · ${user.records} synced records · ${user.tmdbToday} TMDB requests today`));
-  const actions = el('div', 'confirm-actions confirm-actions--stacked');
-  const close = () => overlay.remove();
-  const add = (label, variant, run) => {
-    const b = dialogButton(label, variant);
-    b.addEventListener('click', async () => { close(); await run(); });
-    actions.appendChild(b);
-  };
-  if (user.status === 'pending') add('Approve', 'primary', () => act(() => adminRequest('POST', `/users/${user.id}/approve`)));
+// What the Manage row offers for one account; each asks first where it can't be undone.
+function userActions(user) {
+  const actions = [];
+  const add = (label, variant, run) => actions.push(smallButton(label, variant, run));
   if (user.devices) add('Sign out all their devices', 'secondary', () => act(() => adminRequest('POST', `/users/${user.id}/sign-out`)));
   if (user.recoveryUntil) {
     add('Cancel their recovery', 'secondary', async () => {
@@ -299,43 +376,116 @@ async function userMenu(user) {
     const ok = await confirmDialog({ title: `Delete ${user.displayName}?`, message: 'Their account and everything synced to it is deleted from the server. What their devices hold stays there. This can\'t be undone.', confirmLabel: 'Delete', danger: true });
     if (ok) await act(() => adminRequest('DELETE', `/users/${user.id}`));
   });
-  add('Close', 'secondary', async () => {});
-  modal.appendChild(actions);
-  overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
+  return actions;
+}
+
+// The design's StatusPill: Active, Recovering or Suspended.
+function statusPill(user) {
+  if (user.status === 'suspended') return el('span', 'tt-pill tt-pill--danger', 'Suspended');
+  if (user.recoveryUntil) return el('span', 'tt-pill tt-pill--warning', 'Recovering');
+  return el('span', 'tt-pill tt-pill--success', 'Active');
+}
+
+function manageButton(user, group) {
+  const open = openUserId === user.id;
+  const b = el('button', web ? 'admin-btn admin-btn--secondary' : 'settings-row__btn', 'Manage');
+  b.type = 'button';
+  b.setAttribute('aria-expanded', open ? 'true' : 'false');
+  b.addEventListener('click', () => {
+    openUserId = openUserId === user.id ? null : user.id;
+    const nowOpen = openUserId === user.id;
+    document.querySelectorAll('.admin-user__actions').forEach(node => node.remove());
+    document.querySelectorAll('.admin-user [aria-expanded]').forEach(node => node.setAttribute('aria-expanded', 'false'));
+    b.setAttribute('aria-expanded', nowOpen ? 'true' : 'false');
+    if (nowOpen) group.appendChild(userActionsRow(user));
+  });
+  return b;
+}
+
+function userActionsRow(user) {
+  const box = el('div', 'admin-user__actions');
+  userActions(user).forEach(b => box.appendChild(b));
+  return box;
 }
 
 function renderUsers(users) {
   const others = users.filter(u => u.status !== 'pending');
-  const card = section(`Accounts (${others.length})`);
+  const { wrap, card } = section(`Accounts (${others.length})`);
+  if (web) {
+    card.classList.add('admin-table', 'admin-table--users');
+    const head = el('div', 'admin-trow admin-trow--head');
+    ['Name', 'Status', 'Last seen', 'Devices', 'Records', ''].forEach((label, i) => head.appendChild(el('span', i === 3 || i === 4 ? 'num' : null, label)));
+    card.appendChild(head);
+  }
   others.forEach(user => {
-    const label = user.isAdmin ? `${user.displayName} (you, admin)` : user.displayName;
-    const sub = [STATUS_LABEL[user.status], user.recoveryUntil ? 'recovery in progress' : null, `last seen ${when(user.lastSeen)}`, `${user.devices} device${user.devices === 1 ? '' : 's'}`, `${user.records} records`].filter(Boolean).join(' · ');
-    card.appendChild(row(label, sub, user.isAdmin ? [] : [smallButton('Manage', 'secondary', () => userMenu(user))]));
+    const group = el('div', 'admin-user');
+    if (web) {
+      const r = el('div', 'admin-trow');
+      const name = el('span', 'admin-trow__name', user.displayName);
+      if (user.isAdmin) name.appendChild(el('span', 'admin-trow__you', 'You · admin'));
+      const status = el('span');
+      status.appendChild(statusPill(user));
+      const manage = el('span', 'num');
+      if (!user.isAdmin) manage.appendChild(manageButton(user, group));
+      r.append(name, status, el('span', null, when(user.lastSeen)), el('span', 'num', count(user.devices)), el('span', 'num', count(user.records)), manage);
+      group.appendChild(r);
+    } else {
+      const label = user.isAdmin ? `${user.displayName} (you, admin)` : user.displayName;
+      const sub = [user.status === 'suspended' ? 'suspended' : null, user.recoveryUntil ? 'recovery in progress' : null, `last seen ${when(user.lastSeen)}`, `${user.devices} device${user.devices === 1 ? '' : 's'}`, `${count(user.records)} records`].filter(Boolean).join(' · ');
+      const r = row(label, sub);
+      if (!user.isAdmin) r.appendChild(manageButton(user, group));
+      group.appendChild(r);
+    }
+    if (openUserId === user.id && !user.isAdmin) group.appendChild(userActionsRow(user));
+    card.appendChild(group);
   });
+  return wrap;
 }
 
 function renderTmdb(settings) {
-  const card = section('Movie and show information (TMDB)');
-  const r = row('TMDB for online accounts', settings.tmdbProxy === 'on' ? 'On: online accounts use your TMDB token' : 'Paused: online accounts get no posters or details');
+  const { wrap, card } = section(web ? 'TMDB' : 'Movie and show information (TMDB)');
+  const r = row(web ? 'For online accounts' : 'TMDB for online accounts', settings.tmdbProxy === 'on' ? 'On: online accounts use your TMDB token' : 'Paused: online accounts get no posters or details');
   r.appendChild(buildSwitch('TMDB for online accounts', settings.tmdbProxy === 'on', on => act(() => adminRequest('PATCH', '/settings', { tmdbProxy: on ? 'on' : 'off' }))));
   card.appendChild(r);
-  card.appendChild(row('Daily cap', `${settings.tmdbDailyCap} requests a day for everyone together`, [smallButton('Change', 'secondary', async () => {
+  const cap = web ? count(settings.tmdbDailyCap) : settings.tmdbDailyCap;
+  card.appendChild(row('Daily cap', `${cap} requests a day for everyone together`, [smallButton('Change', 'pill', async () => {
     const value = await promptDialog({ title: 'Daily cap', label: 'Requests per day (100 to 90000)', value: String(settings.tmdbDailyCap), confirmLabel: 'Save' });
     if (value !== null) await act(() => adminRequest('PATCH', '/settings', { tmdbDailyCap: Number(value) }));
   })]));
+  return wrap;
+}
+
+function activityText(entry) {
+  const about = entry.targetName || (entry.details && entry.details.name) || (entry.details && entry.details.note) || '';
+  return entry.action === 'settings' && entry.details ? Object.entries(entry.details).map(([k, v]) => `${k}: ${v}`).join(', ') : about;
 }
 
 function renderActivity(entries) {
-  const card = section('Activity');
+  const { wrap, card } = section('Activity');
   if (!entries.length) {
     card.appendChild(row('Nothing yet', null));
-    return;
+    return wrap;
+  }
+  if (web) {
+    card.classList.add('admin-table', 'admin-table--activity');
+    const head = el('div', 'admin-trow admin-trow--head');
+    head.append(el('span', null, 'What'), el('span', null, 'Who / details'), el('span', 'num', 'When'));
+    card.appendChild(head);
   }
   entries.slice(0, 30).forEach(entry => {
-    const about = entry.targetName || (entry.details && entry.details.name) || (entry.details && entry.details.note) || '';
-    const detail = entry.action === 'settings' && entry.details ? Object.entries(entry.details).map(([k, v]) => `${k}: ${v}`).join(', ') : about;
-    card.appendChild(row(ACTION_TEXT[entry.action] || entry.action, [detail, when(entry.at)].filter(Boolean).join(' · ')));
+    const what = ACTION_TEXT[entry.action] || entry.action;
+    const detail = activityText(entry);
+    if (web) {
+      const r = el('div', 'admin-trow');
+      r.append(el('span', 'admin-trow__name', what), el('span', null, detail), el('span', 'num', when(entry.at)));
+      const group = el('div', 'admin-user');
+      group.appendChild(r);
+      card.appendChild(group);
+    } else {
+      card.appendChild(row(what, [detail, when(entry.at)].filter(Boolean).join(' · ')));
+    }
   });
+  return wrap;
 }
 
 // ---------- Drawing the page ----------
@@ -349,15 +499,27 @@ async function render() {
   ]);
   const scroll = window.scrollY;
   adminEl.innerHTML = '';
-  const pushCard = section('This device');
-  await renderPush(pushCard, overview.push);
-  renderRequests(users);
-  renderNumbers(overview);
-  renderSignupMode(overview.settings);
-  renderInvites(invites);
-  renderUsers(users);
-  renderTmdb(overview.settings);
-  renderActivity(entries);
+  if (web) {
+    adminEl.appendChild(renderNumbers(overview));
+    const grid = el('div', 'admin-grid');
+    const main = el('div', 'admin-main');
+    const aside = el('aside', 'admin-aside');
+    main.append(renderRequests(users), renderUsers(users), renderActivity(entries));
+    aside.append(renderSignupMode(overview.settings), renderInvites(invites), renderTmdb(overview.settings), renderPush(overview.push));
+    grid.append(main, aside);
+    adminEl.appendChild(grid);
+  } else {
+    adminEl.append(
+      renderPush(overview.push),
+      renderRequests(users),
+      renderNumbers(overview),
+      renderSignupMode(overview.settings),
+      renderInvites(invites),
+      renderUsers(users),
+      renderTmdb(overview.settings),
+      renderActivity(entries),
+    );
+  }
   window.scrollTo(0, scroll);
   if (window.location.hash === '#requests' && !render.scrolled) {
     render.scrolled = true;
@@ -373,6 +535,10 @@ function copyButton(text) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // The browser shell (top bar, footer, "Settings / Admin" breadcrumbs) on laptops only: the
+  // page has no bottom nav, as drawn for phones.
+  web = isLaptopLayout();
+  if (web) renderBrowserShell('profile');
   adminEl.appendChild(el('p', 'settings-row__sub', 'Loading…'));
   const found = await findAdminProfile();
   if (found.error) {

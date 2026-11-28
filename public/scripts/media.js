@@ -404,6 +404,8 @@ function renderBreadcrumbs(active) {
   const section = BROWSER_SECTIONS[active];
   if (!section || active === 'movies' || active === 'shows') trail.push(BROWSER_SECTIONS.home);
   if (section && active !== 'home') trail.push(section);
+  // A page under another page (Admin, under Settings) names its parent on the back button.
+  if (back.dataset.crumb) trail.splice(0, trail.length, { label: back.dataset.crumb, href: back.dataset.back });
 
   const crumbs = el('nav', 'tt-crumbs');
   crumbs.setAttribute('aria-label', 'Breadcrumb');

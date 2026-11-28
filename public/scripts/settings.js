@@ -30,9 +30,19 @@ function savePrefs(updates) {
 
 // ---------- Profile card / token ----------
 
+// Two copies of the card: the phone's (one tappable card) and the laptop's (a wider card with an
+// "Edit name and TMDB token" button, the design's WebSettings).
 function renderProfileCard() {
+  const initial = user.displayName.trim().charAt(0).toUpperCase();
+  const kind = user.account ? 'Online account' : 'Offline profile';
   document.getElementById('settings-name').textContent = user.displayName;
-  document.getElementById('settings-avatar').textContent = user.displayName.trim().charAt(0).toUpperCase();
+  document.getElementById('settings-avatar').textContent = initial;
+  document.getElementById('settings-profile-sub').textContent = `${kind} · Edit name and TMDB token`;
+  document.getElementById('settings-web-name').textContent = user.displayName;
+  document.getElementById('settings-web-avatar').textContent = initial;
+  document.getElementById('settings-web-sub').textContent = user.account
+    ? (user.account.email ? `${kind} · ${user.account.email}` : kind)
+    : `${kind} · this device only`;
 }
 
 // Name and TMDB token, as on the profile picker's Edit. A changed token is checked with TMDB
@@ -99,14 +109,24 @@ function renderAppearance() {
   const current = prefs();
   const chips = document.getElementById('theme-chips');
   chips.innerHTML = '';
-  THEME_OPTIONS.forEach(([id, label]) => chips.appendChild(buildChip(label, {
-    selected: current.theme === id,
-    onClick: () => {
-      savePrefs({ theme: id });
-      window.applyProfileTheme();
-      renderAppearance();
-    },
-  })));
+  const pickTheme = id => {
+    savePrefs({ theme: id });
+    window.applyProfileTheme();
+    renderAppearance();
+  };
+  // Chips on the phone, a segmented control on laptops (the design's Settings and WebSettings).
+  if (isLaptopLayout()) {
+    chips.className = 'tt-seg tt-seg--inline settings-seg';
+    THEME_OPTIONS.forEach(([id, label]) => {
+      const btn = el('button', `tt-seg__item${current.theme === id ? ' tt-seg__item--on' : ''}`, label);
+      btn.type = 'button';
+      btn.setAttribute('aria-pressed', current.theme === id ? 'true' : 'false');
+      btn.addEventListener('click', () => pickTheme(id));
+      chips.appendChild(btn);
+    });
+  } else {
+    THEME_OPTIONS.forEach(([id, label]) => chips.appendChild(buildChip(label, { selected: current.theme === id, onClick: () => pickTheme(id) })));
+  }
 
   document.getElementById('accent-name').textContent = ACCENT_NAMES[current.accent] || '';
   const swatches = document.getElementById('accent-swatches');
@@ -132,10 +152,18 @@ function renderAppearance() {
 
 // ---------- Rows ----------
 
-function settingsRow({ label, sub = null, value = null, switchOn = null, onSwitch, onClick, danger = false, disabled = false }) {
-  const isButton = Boolean(onClick);
-  const row = el(isButton ? 'button' : 'div', `settings-row${danger ? ' settings-row--danger' : ''}`);
-  if (isButton) {
+// The design's SettingsRow kinds:
+//   - switch (`switchOn` + `onSwitch`)
+//   - action: a small pill button labelled `action` that runs `onClick` ("Export", "Sync now");
+//     with `danger` the label and pill are red ("Delete", "Reset")
+//   - link: the whole row opens something, with an optional `value` and a chevron
+//   - plain text (no onClick)
+// `badge` (a count) sits before the control when something is waiting. An action row is a div,
+// so `row.disabled` is passed through to its pill (backUpNow/exportData set it).
+function settingsRow({ label, sub = null, value = null, action = null, badge = null, switchOn = null, onSwitch, onClick, danger = false, disabled = false }) {
+  const isLink = Boolean(onClick) && !action;
+  const row = el(isLink ? 'button' : 'div', `settings-row${danger ? ' settings-row--danger' : ''}${disabled ? ' settings-row--disabled' : ''}`);
+  if (isLink) {
     row.type = 'button';
     row.disabled = disabled;
     row.addEventListener('click', onClick);
@@ -144,12 +172,23 @@ function settingsRow({ label, sub = null, value = null, switchOn = null, onSwitc
   text.appendChild(el('span', 'settings-row__label', label));
   if (sub) text.appendChild(el('span', 'settings-row__sub', sub));
   row.appendChild(text);
+  if (badge) row.appendChild(el('span', 'tt-badge', String(badge)));
 
   if (switchOn !== null) {
     const sw = buildSwitch(label, switchOn, onSwitch);
     sw.disabled = disabled;
     row.appendChild(sw);
-  } else if (value !== null || (isButton && !danger)) {
+  } else if (action && onClick) {
+    const pill = el('button', 'settings-row__btn', action);
+    pill.type = 'button';
+    pill.disabled = disabled;
+    pill.addEventListener('click', onClick);
+    row.appendChild(pill);
+    Object.defineProperty(row, 'disabled', {
+      get: () => pill.disabled,
+      set: on => { pill.disabled = on; row.classList.toggle('settings-row--disabled', Boolean(on)); },
+    });
+  } else if (isLink) {
     const valueEl = el('span', 'settings-row__value', value || '');
     valueEl.insertAdjacentHTML('beforeend', ttIcon('chevron', { size: 18 }));
     row.appendChild(valueEl);
@@ -157,9 +196,11 @@ function settingsRow({ label, sub = null, value = null, switchOn = null, onSwitc
   return row;
 }
 
-function settingsSection(title, rows) {
+// `id` is the anchor the laptop layout's section list links to.
+function settingsSection(title, rows, id = null) {
   const section = el('section', 'settings-section');
-  section.appendChild(el('span', 'tt-filter-label', title));
+  if (id) section.id = id;
+  section.appendChild(el('h2', 'tt-filter-label settings-section__title', title));
   const card = el('div', 'settings-card');
   rows.filter(Boolean).forEach(row => card.appendChild(row));
   section.appendChild(card);
@@ -744,31 +785,33 @@ function onlineAccountSection() {
   if (!account) {
     return settingsSection('Online account', [
       settingsRow({ label: 'Make this an online account', sub: 'Sign in to it on your other devices', onClick: makeOnline }),
-    ]);
+    ], 'online');
   }
   if (!isSignedIn(user)) {
     return settingsSection('Online account', [
       settingsRow({
         label: 'Signed out',
         sub: `This device is no longer signed in to ${account.displayName}'s account. Sign in again with your key.`,
-        value: 'Sign in',
+        action: 'Sign in',
         onClick: () => { window.location.href = 'profile-picker.html?screen=signin'; },
       }),
       settingsRow({ label: 'Make it an offline profile', sub: 'Keep everything on this device, without the account', onClick: () => { unlinkProfileAccount(user.id); afterLeavingAccount('keep'); } }),
-    ]);
+    ], 'online');
   }
   const adminRow = account.isAdmin ? settingsRow({
     label: 'Admin page',
     sub: account.pendingRequests ? `${account.pendingRequests} waiting to join` : 'Sign-ups, invites, users and limits',
+    value: 'Open',
+    badge: account.pendingRequests || null,
     onClick: () => { window.location.href = 'admin.html'; },
   }) : null;
-  const syncRow = settingsRow({ label: 'Sync', sub: 'Checking…', value: 'Sync now', onClick: () => syncFromSettings(syncRow) });
+  const syncRow = settingsRow({ label: 'Sync', sub: 'Checking…', action: 'Sync now', onClick: () => syncFromSettings(syncRow) });
   currentSyncRow = syncRow;
   showSyncStatus(syncRow);
   const recoveryRow = account.recovery ? settingsRow({
     label: 'Someone is recovering this account',
     sub: `It gets a new key on ${new Date(account.recovery.completesAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}. Not you?`,
-    value: 'Cancel',
+    action: 'Cancel',
     danger: true,
     onClick: cancelRecoveryFromSettings,
   }) : null;
@@ -779,21 +822,22 @@ function onlineAccountSection() {
     settingsRow({
       label: 'Friends',
       sub: account.friendRequests ? `${account.friendRequests} waiting for an answer` : 'Your friend code, requests and what friends see',
+      badge: account.friendRequests || null,
       onClick: () => { window.location.href = 'friends.html'; },
     }),
-    settingsRow({ label: 'Email', sub: account.email ? `${account.email} · for getting back in if you lose your key` : 'For getting back in if you lose your key', value: 'Change', onClick: changeEmail }),
+    settingsRow({ label: 'Email', sub: account.email ? `${account.email} · for getting back in if you lose your key` : 'For getting back in if you lose your key', action: 'Change', onClick: changeEmail }),
     settingsRow({
       label: 'Account key',
       sub: account.keySavedAt ? 'Saved' : account.accountKey ? 'Not saved yet. Save it now.' : 'Not on this device',
-      value: account.accountKey ? 'Show' : null,
+      action: account.accountKey ? 'Show' : null,
       onClick: showAccountKey,
     }),
     settingsRow({ label: 'Make a new key', sub: 'If yours was lost or seen by someone else', onClick: () => newAccountKey() }),
     settingsRow({ label: 'Add a device', sub: 'A one-time code to sign in on another device', onClick: addDevice }),
     settingsRow({ label: 'Signed-in devices', onClick: showDevices }),
     settingsRow({ label: 'Sign out of this device', sub: 'Keeps this profile here as an offline one', onClick: signOutThisDevice }),
-    settingsRow({ label: 'Delete online account', sub: 'Deletes it on the server for every device', danger: true, onClick: deleteAccount }),
-  ]);
+    settingsRow({ label: 'Delete online account', sub: 'Deletes it on the server for every device', danger: true, action: 'Delete', onClick: deleteAccount }),
+  ], 'online');
 }
 
 // ---------- Account ----------
@@ -841,7 +885,7 @@ function renderSections() {
   container.className = 'stack';
   container.style.gap = 'var(--space-6)';
 
-  container.appendChild(settingsSection('Notifications', notificationRows(current)));
+  container.appendChild(settingsSection('Notifications', notificationRows(current), 'notifications'));
 
   container.appendChild(settingsSection('Library', [
     settingsRow({
@@ -851,10 +895,10 @@ function renderSections() {
       onClick: chooseRegion,
     }),
     settingsRow({ label: 'Language', sub: 'Titles, overviews and episode names', value: languageName(current.language), onClick: chooseLanguage }),
-  ]));
+  ], 'library'));
 
-  const backupNow = user.account ? null : settingsRow({ label: 'Back up now', onClick: () => backUpNow(backupNow), disabled: !isNativeApp() });
-  const exportRow = settingsRow({ label: 'Export data', sub: exportSub(), onClick: () => exportData(exportRow) });
+  const backupNow = user.account ? null : settingsRow({ label: 'Back up now', sub: 'Save a copy to Documents/Watchlog', action: 'Back up', onClick: () => backUpNow(backupNow), disabled: !isNativeApp() });
+  const exportRow = settingsRow({ label: 'Export data', sub: exportSub(), action: 'Export', onClick: () => exportData(exportRow) });
   container.appendChild(settingsSection('Data & backup', [
     settingsRow({
       label: 'Auto-backup',
@@ -865,24 +909,24 @@ function renderSections() {
     }),
     backupNow,
     exportRow,
-    settingsRow({ label: 'Import data', sub: 'Load a backup into this profile, or as a new one', onClick: () => document.getElementById('import-app-input').click() }),
-  ].filter(Boolean)));
+    settingsRow({ label: 'Import data', sub: 'Load a backup into this profile, or as a new one', action: 'Import', onClick: () => document.getElementById('import-app-input').click() }),
+  ].filter(Boolean), 'data'));
 
   const online = onlineAccountSection();
   if (online) container.appendChild(online);
 
   container.appendChild(settingsSection('Account', [
     isSignedIn(user)
-      ? settingsRow({ label: 'TMDB token', sub: "Not needed: this online profile uses Watchlog's", value: user.tmdbApiKey ? 'Change' : 'Add', onClick: () => openProfileDialog({ focusToken: true }) })
-      : settingsRow({ label: 'TMDB token', sub: 'The API Read Access Token this profile uses', value: 'Change', onClick: () => openProfileDialog({ focusToken: true }) }),
+      ? settingsRow({ label: 'TMDB token', sub: "Not needed: this online profile uses Watchlog's", action: user.tmdbApiKey ? 'Change' : 'Add', onClick: () => openProfileDialog({ focusToken: true }) })
+      : settingsRow({ label: 'TMDB token', sub: 'The API Read Access Token this profile uses', action: 'Change', onClick: () => openProfileDialog({ focusToken: true }) }),
     settingsRow({ label: 'Switch profile', onClick: () => logout() }),
-    settingsRow({ label: 'Reset all data', sub: user.account ? 'Empties this library on every signed-in device' : 'Empties this profile\'s library on this phone', danger: true, onClick: resetAllData }),
-    settingsRow({ label: 'Delete profile', sub: 'Removes the profile and all its data from this phone', danger: true, onClick: deleteThisProfile }),
-  ]));
+    settingsRow({ label: 'Reset all data', sub: user.account ? 'Empties this library on every signed-in device' : 'Empties this profile\'s library on this device', danger: true, action: 'Reset', onClick: resetAllData }),
+    settingsRow({ label: 'Delete profile', sub: 'Removes the profile and all its data from this device', danger: true, action: 'Delete', onClick: deleteThisProfile }),
+  ], 'account'));
 
   container.appendChild(settingsSection('About', [
     settingsRow({ label: 'Licences', onClick: () => { window.location.href = 'licences.html'; } }),
-  ]));
+  ], 'about'));
 }
 
 // The web app's version comes from version.json, written when the site is deployed
@@ -915,13 +959,38 @@ async function renderVersion() {
   }
 }
 
+// Laptops: the sticky section list (the design's WebSettings) marks the section being read.
+function initSectionNav() {
+  const nav = document.getElementById('settings-nav');
+  if (!nav || !isLaptopLayout()) return;
+  const links = [...nav.querySelectorAll('a')];
+  const update = () => {
+    let current = links[0];
+    links.forEach(link => {
+      const section = document.getElementById(link.getAttribute('href').slice(1));
+      if (section && section.getBoundingClientRect().top <= 120) current = link;
+    });
+    // At the bottom of the page the last sections can't scroll up to the top.
+    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) current = links[links.length - 1];
+    links.forEach(link => {
+      link.classList.toggle('is-on', link === current);
+      if (link === current) link.setAttribute('aria-current', 'true');
+      else link.removeAttribute('aria-current');
+    });
+  };
+  window.addEventListener('scroll', update, { passive: true });
+  update();
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   user = await requireLogin();
   if (!user) return;
   renderProfileCard();
   document.getElementById('settings-profile').addEventListener('click', () => openProfileDialog());
+  document.getElementById('settings-web-edit').addEventListener('click', () => openProfileDialog());
   renderAppearance();
   renderSections();
   initImport();
   renderVersion();
+  initSectionNav();
 });
