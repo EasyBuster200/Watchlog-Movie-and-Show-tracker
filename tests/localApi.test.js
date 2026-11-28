@@ -290,6 +290,7 @@ test('recommendations: ranks by match count then popularity, excludes seeds and 
   assert.deepEqual(res.items.map(i => i.tmdbId), [300, 100, 200, 400]);
   assert.deepEqual(res.items[0], {
     tmdbId: 300, mediaType: 'movie', title: 'Rec 300', year: null, releaseDate: null,
+    genreIds: [], // for the laptop browse view's genre filter
   });
 
   // The ranked pool is cached for the page's lifetime - asking again doesn't refetch.

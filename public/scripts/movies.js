@@ -30,5 +30,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     { emptyText: 'Watch or save a few movies to get recommendations.' }
   );
 
-  initBrowse({ mediaType: MEDIA_TYPE, context, excludeIds: () => context.watchedMovieIds });
+  // Laptops get the design's browse view (browse.js's initWebBrowse); phones the BrowseHeader one.
+  if (isLaptopLayout()) initWebBrowse({ mediaType: MEDIA_TYPE, context, excludeIds: () => context.watchedMovieIds });
+  else initBrowse({ mediaType: MEDIA_TYPE, context, excludeIds: () => context.watchedMovieIds });
 });
