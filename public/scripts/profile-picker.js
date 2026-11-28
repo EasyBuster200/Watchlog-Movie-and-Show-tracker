@@ -980,13 +980,8 @@ const SCREENS = {
 // posters are this week's trending movies from the server (GET /v1/posters: just poster paths,
 // no sign-in needed), loaded from TMDB's image server. Without them (offline, the server's TMDB
 // switch off) the mosaic shows plain tiles instead.
-const LAPTOP_QUERY = '(min-width: 1024px) and (hover: hover) and (pointer: fine)';
 const MOSAIC_TILES = 24;
 
-function isLaptopLayout() {
-  const native = Boolean(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-  return !native && Boolean(window.matchMedia && window.matchMedia(LAPTOP_QUERY).matches);
-}
 
 async function fillPosterMosaic() {
   const mosaic = document.getElementById('auth-mosaic');

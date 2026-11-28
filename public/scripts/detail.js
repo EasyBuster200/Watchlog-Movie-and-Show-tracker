@@ -287,6 +287,312 @@ async function renderTitleFriends(mediaType, tmdbId) {
   box.hidden = false;
 }
 
+// ---------- Laptop (the design's browser detail page) ----------
+// A full-width backdrop hero (breadcrumbs, poster, title, rating / year / genres / seasons /
+// status, overview, the show's progress, Trailer / Watched / Watchlist / favourite), then a main
+// column with the episodes (season tabs over EpisodeRows; shows only) and a 320px sidebar (next
+// episode, details), then the phone page's cast, collection and More Like This, shown as
+// full-width rows. Built only on laptops (isLaptopLayout); the phone hero, head, actions,
+// overview and season rows are hidden there by CSS (.phone-only).
+
+function sentenceCase(text) {
+  return text ? text.charAt(0).toUpperCase() + text.slice(1).toLowerCase() : text;
+}
+
+function languageName(code) {
+  if (!code) return null;
+  try {
+    return new Intl.DisplayNames([navigator.language || 'en'], { type: 'language' }).of(code);
+  } catch (error) {
+    return code;
+  }
+}
+
+function longDate(dateStr) {
+  return dateStr ? parseLocalDate(dateStr).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+}
+
+// Built before the title loads, so the breadcrumbs (media.js, data-crumbs-slot) land in it.
+function buildWebDetail() {
+  const main = document.querySelector('main');
+  const hero = el('section', 'web-hero web-hero--detail web-only');
+  const bd = el('div', 'web-hero__bd');
+  bd.setAttribute('aria-hidden', 'true');
+  hero.appendChild(bd);
+  const wrap = el('div', 'web-wrap web-hero__in web-hero__in--detail');
+  const crumbs = el('div', 'web-hero__crumbs');
+  crumbs.dataset.crumbsSlot = '1';
+  wrap.appendChild(crumbs);
+  const row = el('div', 'web-hero__row');
+  const poster = el('div', 'web-hero__poster');
+  const info = el('div', 'web-hero__info web-hero__info--detail');
+  info.appendChild(el('h1', 'web-hero__title'));
+  row.append(poster, info);
+  wrap.appendChild(row);
+  hero.appendChild(wrap);
+  main.insertBefore(hero, main.firstChild);
+
+  const grid = el('div', 'web-wrap web-detail web-only');
+  const mainCol = el('div', 'web-detail__main');
+  const aside = el('aside', 'web-detail__aside');
+  grid.append(mainCol, aside);
+  hero.after(grid);
+  return { hero, bd, poster, info, grid, mainCol, aside };
+}
+
+function webIconButton(icon, label, { iconOnly = false, primary = false } = {}) {
+  const btn = el('button', `tt-btn ${primary ? 'tt-btn--primary' : 'tt-btn--secondary'} web-btn-lg${iconOnly ? ' tt-btn--icon' : ''}`);
+  btn.type = 'button';
+  btn.setOn = on => {
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.innerHTML = ttIcon(icon, { size: 20, filled: on });
+    if (!iconOnly) btn.appendChild(el('span', null, label));
+  };
+  if (iconOnly) btn.setAttribute('aria-label', label);
+  btn.setOn(false);
+  return btn;
+}
+
+function fillWebHero(web, data, mediaType, item, context, progress) {
+  const backdrop = backdropUrl(data.backdrop_path);
+  if (backdrop) web.bd.style.backgroundImage = `url('${backdrop}')`;
+  web.poster.appendChild(buildPosterArt(item.title, posterUrl(item.posterPath), { lazy: false }));
+  web.info.querySelector('.web-hero__title').textContent = item.title;
+
+  const meta = el('div', 'web-hero__meta');
+  if (data.vote_average) {
+    const star = el('span', 'web-star');
+    star.innerHTML = `${ratingStarSvg(16)}<span>${Number(data.vote_average).toFixed(1)}</span>`;
+    meta.appendChild(star);
+  }
+  [
+    item.year,
+    (data.genres || []).slice(0, 3).map(g => g.name).join(', '),
+    mediaType === 'movie' ? formatRuntime(data.runtime)
+      : (data.number_of_seasons ? `${data.number_of_seasons} season${data.number_of_seasons === 1 ? '' : 's'}` : null),
+    mediaType === 'tv' ? sentenceCase(data.status) : null,
+  ].filter(Boolean).forEach(text => meta.appendChild(el('span', null, text)));
+  web.info.appendChild(meta);
+
+  const overview = textOrEnglish(data, 'overview');
+  if (overview) web.info.appendChild(el('p', 'web-hero__overview', overview));
+
+  if (progress) {
+    const box = el('div', 'web-hero__progress');
+    const barBox = el('div', 'web-hero__bar web-hero__bar--wide');
+    progress.bar = buildProgressBar(progress.watched, progress.total, 'Episodes watched');
+    barBox.appendChild(progress.bar);
+    progress.label = document.createTextNode('');
+    box.append(barBox, progress.label);
+    web.info.appendChild(box);
+    progress.update = () => {
+      progress.bar.setProgress(progress.watched, progress.total);
+      progress.label.textContent = `${progress.watched} of ${progress.total} episodes watched`;
+    };
+    progress.update();
+  }
+
+  const actions = el('div', 'web-hero__actions');
+  const trailer = findTrailer(data);
+  if (trailer) {
+    const link = el('a', 'tt-btn tt-btn--primary web-btn-lg');
+    link.href = `https://www.youtube.com/watch?v=${trailer.key}`;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.innerHTML = `${ttIcon('play', { size: 20, filled: true })}<span>Trailer</span>`;
+    actions.appendChild(link);
+  }
+  if (mediaType === 'movie') {
+    const watched = webIconButton('eye', 'Watched');
+    actions.appendChild(watched);
+    attachWatchedButton(null, item, context.watchedMovieIds, null, { button: watched });
+  }
+  const saveAnchor = el('span', 'save-anchor');
+  const save = webIconButton('bookmark', 'Watchlist');
+  saveAnchor.appendChild(save);
+  actions.appendChild(saveAnchor);
+  attachSaveButton(null, item, context, { button: save });
+  const favorite = webIconButton('heart', 'Add to favourites', { iconOnly: true });
+  actions.appendChild(favorite);
+  attachFavoriteButton(null, item, context.favoriteIds, null, { button: favorite });
+  web.info.appendChild(actions);
+}
+
+function fillWebAside(web, data, mediaType) {
+  const next = mediaType === 'tv' && data.next_episode_to_air;
+  if (next && next.air_date) {
+    const card = el('section', 'web-card web-card--next');
+    card.appendChild(el('span', 'web-eyebrow', 'Next episode'));
+    const hasName = next.name && !/^Episode\s+\d+$/i.test(next.name.trim());
+    card.appendChild(el('span', 'web-card__strong', `S${next.season_number} · E${next.episode_number}${hasName ? ` · ${next.name}` : ''}`));
+    const when = relativeAirLabel(next.air_date);
+    const day = parseLocalDate(next.air_date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+    card.appendChild(el('span', 'web-card__sub', `${day} · ${when.charAt(0).toLowerCase()}${when.slice(1)}`));
+    web.aside.appendChild(card);
+  }
+
+  const rows = mediaType === 'tv' ? [
+    ['Created by', (data.created_by || []).map(p => p.name).join(', ')],
+    ['Network', (data.networks || []).map(n => n.name).slice(0, 2).join(', ')],
+    ['First aired', longDate(data.first_air_date)],
+    ['Status', sentenceCase(data.status)],
+    ['Episodes', data.number_of_episodes ? `${data.number_of_episodes}${(data.episode_run_time || [])[0] ? ` · ~${data.episode_run_time[0]}m each` : ''}` : null],
+    ['Language', languageName(data.original_language)],
+  ] : [
+    ['Directed by', ((data.credits && data.credits.crew) || []).filter(c => c.job === 'Director').map(c => c.name).join(', ')],
+    ['Released', longDate(data.release_date)],
+    ['Runtime', formatRuntime(data.runtime)],
+    ['Status', sentenceCase(data.status)],
+    ['Language', languageName(data.original_language)],
+  ];
+  const card = el('section', 'web-card');
+  card.appendChild(el('h2', 'web-card__title', 'Details'));
+  const dl = el('dl', 'web-dl');
+  rows.filter(([, v]) => v).forEach(([k, v]) => {
+    dl.appendChild(el('dt', null, k));
+    dl.appendChild(el('dd', null, v));
+  });
+  card.appendChild(dl);
+  web.aside.appendChild(card);
+  // A movie has no episodes column: the details card spans the page instead.
+  if (mediaType === 'movie') web.grid.classList.add('web-detail--single');
+}
+
+// Season tabs over EpisodeRows. Marking an episode watched offers to catch up on every earlier
+// unwatched episode, as episodes.html does. ?season= picks the tab (Home's links use it).
+async function renderWebEpisodes(web, data, item, progress, watchedEpisodes, lastWatchedAt) {
+  const seasons = (data.seasons || []).filter(s => s.season_number > 0);
+  if (!seasons.length) return;
+  const section = el('section', 'web-episodes');
+  const head = el('div', 'tt-section');
+  head.appendChild(el('h2', null, 'Episodes'));
+  const summary = el('span', 'web-episodes__summary');
+  head.appendChild(summary);
+  section.appendChild(head);
+  const tabs = el('div', 'web-tabs');
+  tabs.setAttribute('role', 'tablist');
+  tabs.setAttribute('aria-label', 'Seasons');
+  section.appendChild(tabs);
+  const list = el('div', 'web-episodes__list');
+  section.appendChild(list);
+  web.mainCol.appendChild(section);
+
+  const watchedSet = new Set(watchedEpisodes.map(e => `${e.seasonNumber}:${e.episodeNumber}`));
+  const seasonCounts = new Map(seasons.map(s => [s.season_number, s.episode_count]));
+  const countWatched = n => [...watchedSet].filter(k => k.startsWith(`${n}:`)).length;
+  const requested = Number(new URLSearchParams(window.location.search).get('season'));
+  const firstUnfinished = seasons.find(s => s.episode_count > 0 && countWatched(s.season_number) < s.episode_count);
+  let current = seasonCounts.has(requested) ? requested
+    : (firstUnfinished || [...seasons].reverse().find(s => s.episode_count > 0) || seasons[0]).season_number;
+  const seasonData = new Map();
+  const rows = new Map();
+
+  const tabButtons = new Map();
+  function renderTabs() {
+    tabs.innerHTML = '';
+    seasons.forEach(s => {
+      const on = s.season_number === current;
+      const b = el('button', `web-tab${on ? ' web-tab--on' : ''}`);
+      b.type = 'button';
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+      b.appendChild(document.createTextNode(s.name && !/^Season \d+$/.test(s.name) ? s.name : `Season ${s.season_number}`));
+      b.appendChild(el('span', 'web-tab__count', s.episode_count ? `${countWatched(s.season_number)}/${s.episode_count}` : 'Soon'));
+      b.addEventListener('click', () => { if (current !== s.season_number) { current = s.season_number; renderTabs(); loadSeason(); } });
+      tabButtons.set(s.season_number, b);
+      tabs.appendChild(b);
+    });
+    const total = seasonCounts.get(current) || 0;
+    summary.textContent = total ? `Season ${current} · ${countWatched(current)} of ${total} watched` : `Season ${current} · coming soon`;
+  }
+
+  async function setWatched(s, e, on) {
+    await fetch(`/api/watched/shows/${item.tmdbId}/season/${s}/episode/${e}`, { method: on ? 'POST' : 'DELETE', credentials: 'same-origin' });
+    const key = `${s}:${e}`;
+    const had = watchedSet.has(key);
+    if (on) watchedSet.add(key);
+    else watchedSet.delete(key);
+    if (had !== on && progress) {
+      progress.watched += on ? 1 : -1;
+      progress.update();
+    }
+    if (s === current && rows.has(e)) rows.get(e).setWatched(on);
+  }
+
+  function unwatchedBefore(season, e) {
+    const before = [];
+    seasonCounts.forEach((count, s) => {
+      const last = s < season ? count : s === season ? e - 1 : 0;
+      for (let n = 1; n <= last; n++) if (!watchedSet.has(`${s}:${n}`)) before.push([s, n]);
+    });
+    return before;
+  }
+
+  async function loadSeason() {
+    const season = current;
+    list.innerHTML = '';
+    list.appendChild(buildSkeletonMediaRow());
+    if (!seasonData.has(season)) {
+      seasonData.set(season, await fetchJson(`/api/tmdb/tv/${item.tmdbId}/season/${season}`).catch(() => null));
+    }
+    if (season !== current) return;
+    const episodes = (seasonData.get(season) && seasonData.get(season).episodes) || [];
+    list.innerHTML = '';
+    rows.clear();
+    if (!episodes.length) {
+      list.appendChild(el('p', 'empty-note', 'No episodes announced yet. They appear here once TMDB lists them.'));
+      return;
+    }
+    episodes.forEach(episode => {
+      const key = `${season}:${episode.episode_number}`;
+      const isNew = !watchedSet.has(key) && !isUnreleased(episode.air_date)
+        && lastWatchedAt && new Date(episode.air_date) > new Date(lastWatchedAt);
+      const row = buildEpisodeRow(episode, {
+        watched: watchedSet.has(key),
+        isNew,
+        onToggle: async () => {
+          const nowWatched = !watchedSet.has(key);
+          await setWatched(season, episode.episode_number, nowWatched);
+          if (nowWatched) {
+            const before = unwatchedBefore(season, episode.episode_number);
+            if (before.length) {
+              const ok = await confirmDialog({
+                title: 'Catch up?',
+                message: `You have ${before.length} unwatched episode${before.length === 1 ? '' : 's'} before this one. Mark ${before.length === 1 ? 'it' : 'them'} as watched too?`,
+                confirmLabel: 'Mark watched',
+                cancelLabel: 'No',
+              });
+              if (ok) await Promise.all(before.map(([s, n]) => setWatched(s, n, true)));
+            }
+          }
+          renderTabs();
+          return nowWatched;
+        },
+      });
+      rows.set(episode.episode_number, row);
+      list.appendChild(row);
+    });
+  }
+
+  renderTabs();
+  loadSeason();
+}
+
+async function renderWebDetail(web, data, mediaType, item, context) {
+  let watchedEpisodes = [];
+  let lastWatchedAt = null;
+  let progress = null;
+  if (mediaType === 'tv') {
+    const res = await fetchJson(`/api/watched/shows/${item.tmdbId}/episodes`).catch(() => ({ episodes: [] }));
+    watchedEpisodes = res.episodes || [];
+    lastWatchedAt = res.lastWatchedAt || null;
+    if (data.number_of_episodes) progress = { watched: watchedEpisodes.length, total: data.number_of_episodes };
+  }
+  fillWebHero(web, data, mediaType, item, context, progress);
+  fillWebAside(web, data, mediaType);
+  if (mediaType === 'tv') renderWebEpisodes(web, data, item, progress, watchedEpisodes, lastWatchedAt);
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   const { mediaType, tmdbId } = getParams();
   if (!mediaType || !tmdbId || !['movie', 'tv'].includes(mediaType)) {
@@ -294,12 +600,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
+  const web = isLaptopLayout() ? buildWebDetail() : null;
+
   // Highlight Movies or Shows in the bottom nav, depending on what this is.
   const nav = document.getElementById('bottom-nav');
   nav.dataset.active = mediaType === 'movie' ? 'movies' : 'shows';
   renderBottomNav(nav);
 
-  const extras = [mediaType === 'movie' ? 'credits,videos,recommendations' : 'credits,videos', withTranslations()].filter(Boolean).join(',');
+  // Shows get More Like This on laptops only (the phone page doesn't have it).
+  const extras = [mediaType === 'movie' || web ? 'credits,videos,recommendations' : 'credits,videos', withTranslations()].filter(Boolean).join(',');
   const [data, context] = await Promise.all([
     fetchJson(`/api/tmdb/${mediaType}/${tmdbId}?append_to_response=${extras}`),
     fetchStandardActionContext(),
@@ -315,5 +624,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (mediaType === 'tv') renderSeasons(data, item);
   if (mediaType === 'movie' && data.belongs_to_collection) renderCollection(data.belongs_to_collection.id, data.id, context);
-  if (mediaType === 'movie') renderSimilar(data, item, context);
+  if (mediaType === 'movie' || web) renderSimilar(data, item, context);
+  if (web) renderWebDetail(web, data, mediaType, item, context);
 });

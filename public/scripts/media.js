@@ -150,6 +150,107 @@ function markNativeApp() {
   document.documentElement.classList.toggle('is-native', native);
 }
 
+// The laptop layout's test, the same as style.css's laptop block: a wide window with a mouse or
+// trackpad, in a browser (never the Android app). Pages build their laptop-only parts only when
+// it matches, so phones don't fetch what they won't show.
+const LAPTOP_QUERY = '(min-width: 1024px) and (hover: hover) and (pointer: fine)';
+
+function isLaptopLayout() {
+  const native = Boolean(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  return !native && Boolean(window.matchMedia && window.matchMedia(LAPTOP_QUERY).matches);
+}
+
+// The design's LandscapeCard (laptops): a 16:9 still with an optional badge ("New"), a play
+// button on hover and a progress bar along the bottom, then the title and a meta line.
+function buildLandscapeCard({ href, title, meta = null, image = null, badge = null, watched = 0, total = 0 }) {
+  const card = el(href ? 'a' : 'div', 'tt-land');
+  if (href) card.href = href;
+  const still = el('span', 'tt-land__still');
+  if (image) {
+    const img = document.createElement('img');
+    img.src = image;
+    img.alt = '';
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    still.appendChild(img);
+  } else {
+    still.appendChild(el('span', 'tt-poster__ph', titleInitials(title)));
+  }
+  if (badge) still.appendChild(el('span', 'tt-land__badge', badge));
+  const play = el('span', 'tt-land__play');
+  play.setAttribute('aria-hidden', 'true');
+  play.innerHTML = ttIcon('play', { size: 18, filled: true });
+  still.appendChild(play);
+  if (total > 0) {
+    const bar = el('span', 'tt-land__bar');
+    const fill = el('span');
+    fill.style.width = `${Math.round(100 * Math.min(watched, total) / total)}%`;
+    bar.appendChild(fill);
+    still.appendChild(bar);
+  }
+  card.appendChild(still);
+  card.appendChild(el('span', 'tt-land__title', title));
+  if (meta) card.appendChild(el('span', 'tt-land__meta', meta));
+  return card;
+}
+
+// The design's EpisodeRow (laptops, the show page's season tabs): still with "E5", title, date
+// and runtime, synopsis, and a "Mark watched" / "Watched" pill. onToggle() does the work and
+// resolves the new state; an unaired episode's pill is disabled ("Not aired yet").
+function buildEpisodeRow(episode, { watched = false, isNew = false, onToggle } = {}) {
+  const unreleased = isUnreleased(episode.air_date);
+  const hasRealTitle = episode.name && !/^Episode\s+\d+$/i.test(episode.name.trim());
+  const row = el('article', 'tt-eprow');
+  const still = el('div', 'tt-eprow__still');
+  if (episode.still_path) {
+    const img = document.createElement('img');
+    img.src = stillUrl(episode.still_path);
+    img.alt = '';
+    img.loading = 'lazy';
+    still.appendChild(img);
+  }
+  still.appendChild(el('span', 'tt-eprow__num', `E${episode.episode_number}`));
+  row.appendChild(still);
+
+  const body = el('div', 'tt-eprow__body');
+  const head = el('div', 'tt-eprow__head');
+  head.appendChild(el('span', 'tt-eprow__title', hasRealTitle ? episode.name : (unreleased ? 'Coming soon' : `Episode ${episode.episode_number}`)));
+  const date = episode.air_date ? parseLocalDate(episode.air_date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+  const meta = [date, episode.runtime ? `${episode.runtime}m` : null].filter(Boolean).join(' • ');
+  if (meta) head.appendChild(el('span', 'tt-eprow__meta', meta));
+  if (isNew) head.appendChild(el('span', 'new-pill', 'New'));
+  body.appendChild(head);
+  if (episode.overview && episode.overview.trim()) body.appendChild(el('p', 'tt-eprow__text', episode.overview));
+  row.appendChild(body);
+
+  const check = el('button', 'tt-eprow__check');
+  check.type = 'button';
+  const setOn = on => {
+    row.classList.toggle('tt-eprow--watched', on);
+    check.classList.toggle('tt-eprow__check--on', on);
+    check.setAttribute('aria-pressed', on ? 'true' : 'false');
+    check.setAttribute('aria-label', `${on ? 'Unmark' : 'Mark'} episode ${episode.episode_number} as watched`);
+    check.innerHTML = ttIcon('eye', { size: 18, filled: on });
+    check.appendChild(document.createTextNode(on ? 'Watched' : 'Mark watched'));
+  };
+  setOn(watched);
+  if (unreleased) {
+    check.disabled = true;
+    check.setAttribute('aria-label', 'Not aired yet');
+    check.innerHTML = '';
+    check.appendChild(document.createTextNode('Not aired yet'));
+  } else if (onToggle) {
+    check.addEventListener('click', async () => {
+      check.disabled = true;
+      setOn(await onToggle());
+      check.disabled = false;
+    });
+  }
+  row.setWatched = setOn;
+  row.appendChild(check);
+  return row;
+}
+
 // ---------- Browser shell (laptops; style.css shows it only there) ----------
 // The design's browser layout: TopNav across the top, SiteFooter at the bottom, breadcrumbs
 // instead of back buttons, and poster rows seven across with prev/next arrows. Built on every
@@ -321,6 +422,11 @@ function renderBreadcrumbs(active) {
   const h1 = document.querySelector('main h1');
   if (h1) new MutationObserver(setHere).observe(h1, { childList: true, characterData: true, subtree: true });
 
+  const slot = document.querySelector('[data-crumbs-slot]');
+  if (slot) {
+    slot.appendChild(crumbs);
+    return;
+  }
   const host = back.parentElement;
   if (host.classList.contains('detail-hero') || getComputedStyle(back).position === 'absolute') {
     crumbs.classList.add('tt-crumbs--over');
@@ -384,7 +490,7 @@ function renderBrowserShell(active) {
     old.replaceWith(buildTopNav(active));
   }
   renderBreadcrumbs(active);
-  document.querySelectorAll('.poster-row').forEach(addPosterRowArrows);
+  document.querySelectorAll('.poster-row, .cast-row').forEach(addPosterRowArrows);
 }
 
 // Every page has an empty <nav class="tt-nav" data-active="..."> - filled in here so the six
