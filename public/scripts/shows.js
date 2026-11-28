@@ -60,5 +60,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   );
 
   await trackedShows;
-  initBrowse({ mediaType: MEDIA_TYPE, context, excludeIds: () => watchedShowIds });
+  if (isLaptopLayout()) initWebBrowse({ mediaType: MEDIA_TYPE, context, excludeIds: () => watchedShowIds });
+  else initBrowse({ mediaType: MEDIA_TYPE, context, excludeIds: () => watchedShowIds });
 });

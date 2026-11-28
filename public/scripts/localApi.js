@@ -1082,7 +1082,8 @@ route('GET', '/api/recommendations/:mediaType', async ({ mediaType }, searchPara
   const totalPages = Math.max(1, Math.ceil(ranked.length / REC_PAGE_SIZE));
   const items = ranked
     .slice((page - 1) * REC_PAGE_SIZE, page * REC_PAGE_SIZE)
-    .map(raw => toStandardItem(raw, mediaType));
+    // genreIds lets the laptop browse view filter the Recommended tab by genre.
+    .map(raw => ({ ...toStandardItem(raw, mediaType), genreIds: raw.genre_ids || [] }));
 
   return jsonResponse({ seedCount, items, page, totalPages });
 });
